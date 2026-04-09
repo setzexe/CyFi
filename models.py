@@ -36,6 +36,7 @@ class Transaction(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False, index=True)
+    transaction_name = db.Column(db.String(120), nullable=False, server_default="Transaction")
     amount = db.Column(db.Numeric(12, 2), nullable=False)
     category = db.Column(db.String(60), nullable=False)
     transaction_type = db.Column(db.String(10), nullable=False)
