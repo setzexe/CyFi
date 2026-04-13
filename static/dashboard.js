@@ -1,0 +1,210 @@
+const ui = {
+  refreshBtn: document.getElementById("refreshBtn"),
+  form: document.getElementById("txnForm"),
+  formMessage: document.getElementById("formMessage"),
+  accountId: document.getElementById("accountId"),
+  transactionType: document.getElementById("transactionType"),
+  transactionName: document.getElementById("transactionName"),
+  amount: document.getElementById("amount"),
+  category: document.getElementById("category"),
+  note: document.getElementById("note"),
+  totalBalance: document.getElementById("totalBalance"),
+  accountsList: document.getElementById("accountsList"),
+  recentList: document.getElementById("recentList"),
+  billsList: document.getElementById("billsList"),
+};
+
+function formatMoney(value) {
+  const parsed = Number.parseFloat(String(value ?? "0"));
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(Number.isFinite(parsed) ? parsed : 0);
+}
+
+function clearChildren(node) {
+  while (node.firstChild) {
+    node.removeChild(node.firstChild);
+  }
+}
+
+function showMessage(text, type = "") {
+  ui.formMessage.textContent = text;
+  ui.formMessage.classList.remove("success", "error");
+  if (type) {
+    ui.formMessage.classList.add(type);
+  }
+}
+
+async function toJson(response) {
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.error || "Request failed");
+  }
+  return body;
+}
+
+function listItem(title, value, detail) {
+  const li = document.createElement("li");
+
+  const top = document.createElement("div");
+  top.className = "item-top";
+
+  const strong = document.createElement("strong");
+  strong.textContent = title;
+
+  const amount = document.createElement("span");
+  amount.textContent = value;
+
+  top.appendChild(strong);
+  top.appendChild(amount);
+
+  const sub = document.createElement("div");
+  sub.className = "item-sub";
+  sub.textContent = detail;
+
+  li.appendChild(top);
+  li.appendChild(sub);
+  return li;
+}
+
+function renderAccounts(summary) {
+  clearChildren(ui.accountsList);
+  clearChildren(ui.accountId);
+
+  ui.totalBalance.textContent = formatMoney(summary.total_balance);
+
+  const accounts = summary.accounts || [];
+  if (!accounts.length) {
+    const empty = document.createElement("li");
+    empty.textContent = "No accounts yet. Add one in the database first.";
+    ui.accountsList.appendChild(empty);
+
+    const option = document.createElement("option");
+    option.textContent = "No account available";
+    option.value = "";
+    ui.accountId.appendChild(option);
+    return;
+  }
+
+  for (const account of accounts) {
+    const details = `${account.account_type} · started ${formatMoney(account.starting_balance)}`;
+    ui.accountsList.appendChild(listItem(account.name, formatMoney(account.current_balance), details));
+
+    const option = document.createElement("option");
+    option.value = String(account.id);
+    option.textContent = `${account.name} (${formatMoney(account.current_balance)})`;
+    ui.accountId.appendChild(option);
+  }
+}
+
+function renderRecent(payload) {
+  clearChildren(ui.recentList);
+  const transactions = payload.transactions || [];
+
+  if (!transactions.length) {
+    const empty = document.createElement("li");
+    empty.textContent = "No purchases yet.";
+    ui.recentList.appendChild(empty);
+    return;
+  }
+
+  for (const tx of transactions) {
+    const detail = `${tx.category} · ${tx.transaction_type}`;
+    ui.recentList.appendChild(listItem(tx.transaction_name, formatMoney(tx.amount), detail));
+  }
+}
+
+function renderBills(payload) {
+  clearChildren(ui.billsList);
+  const bills = payload.bills || [];
+
+  if (!bills.length) {
+    const empty = document.createElement("li");
+    empty.textContent = "No upcoming bills found.";
+    ui.billsList.appendChild(empty);
+    return;
+  }
+
+  for (const bill of bills) {
+    const detail = `Due ${bill.next_due_date} · in ${bill.days_until_due} day(s)`;
+    ui.billsList.appendChild(listItem(bill.name, formatMoney(bill.amount), detail));
+  }
+}
+
+async function loadDashboard() {
+  try {
+    const [summary, recent, bills] = await Promise.all([
+      fetch("/api/accounts/summary").then(toJson),
+      fetch("/api/transactions/recent?limit=10").then(toJson),
+      fetch("/api/bills/upcoming?days=45").then(toJson),
+    ]);
+
+    renderAccounts(summary);
+    renderRecent(recent);
+    renderBills(bills);
+  } catch (error) {
+    showMessage(error.message, "error");
+  }
+}
+
+function validateForm() {
+  const accountId = Number.parseInt(ui.accountId.value, 10);
+  const transactionName = ui.transactionName.value.trim();
+  const category = ui.category.value.trim();
+  const amount = Number.parseFloat(ui.amount.value);
+
+  if (!Number.isInteger(accountId) || accountId < 1) {
+    throw new Error("Pick a valid account.");
+  }
+  if (!transactionName) {
+    throw new Error("Transaction name is required.");
+  }
+  if (!category) {
+    throw new Error("Category is required.");
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("Amount must be greater than 0.");
+  }
+
+  return {
+    account_id: accountId,
+    transaction_name: transactionName,
+    amount: amount.toFixed(2),
+    category,
+    transaction_type: ui.transactionType.value,
+    note: ui.note.value.trim(),
+  };
+}
+
+async function handleSubmit(event) {
+  event.preventDefault();
+  showMessage("");
+
+  let payload;
+  try {
+    payload = validateForm();
+  } catch (error) {
+    showMessage(error.message, "error");
+    return;
+  }
+
+  try {
+    await fetch("/api/transactions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).then(toJson);
+
+    ui.form.reset();
+    showMessage("Saved and refreshed.", "success");
+    await loadDashboard();
+  } catch (error) {
+    showMessage(error.message, "error");
+  }
+}
+
+ui.refreshBtn.addEventListener("click", loadDashboard);
+ui.form.addEventListener("submit", handleSubmit);
+
+loadDashboard();

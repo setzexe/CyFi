@@ -35,6 +35,7 @@ __pycache__/
 venv/
 .pytest_cache/
 .mypy_cache/
+cyfi_local.db
 
 # Generic cache/temp
 .cache/

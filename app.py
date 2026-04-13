@@ -3,7 +3,7 @@ import calendar
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, render_template, request
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import text
@@ -17,6 +17,9 @@ migrate = Migrate()
 
 def _database_url() -> str:
     url = os.getenv("DATABASE_URL", "").strip()
+
+    if not url:
+        return "sqlite:///cyfi_local.db"
 
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+psycopg://", 1)
@@ -93,7 +96,7 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     @app.get("/")
     def home():
-        return "CyFi, active!"
+        return render_template("dashboard.html")
 
     @app.get("/health/db")
     def db_health():
@@ -105,15 +108,31 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     @app.post("/api/transactions")
     def add_transaction():
-        payload = request.get_json(silent=True) or {}
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({"error": "Request body must be a JSON object"}), 400
+
         required_fields = ["account_id", "transaction_name", "amount", "category", "transaction_type"]
         missing = [field for field in required_fields if field not in payload]
         if missing:
             return jsonify({"error": f"Missing required fields: {', '.join(missing)}"}), 400
 
-        account = db.session.get(Account, payload["account_id"])
+        try:
+            account_id = int(payload["account_id"])
+        except (TypeError, ValueError):
+            return jsonify({"error": "account_id must be an integer"}), 400
+
+        account = db.session.get(Account, account_id)
         if account is None:
             return jsonify({"error": "Account not found"}), 404
+
+        transaction_name = str(payload["transaction_name"]).strip()
+        if not transaction_name:
+            return jsonify({"error": "transaction_name cannot be empty"}), 400
+
+        category = str(payload["category"]).strip()
+        if not category:
+            return jsonify({"error": "category cannot be empty"}), 400
 
         try:
             amount = Decimal(str(payload["amount"]))
@@ -137,9 +156,9 @@ def create_app(test_config: dict | None = None) -> Flask:
 
         transaction = Transaction(
             account_id=account.id,
-            transaction_name=str(payload["transaction_name"]).strip(),
+            transaction_name=transaction_name,
             amount=amount,
-            category=str(payload["category"]).strip(),
+            category=category,
             transaction_type=transaction_type,
             note=str(payload.get("note", "")).strip() or None,
             occurred_at=occurred_at or datetime.now(timezone.utc),
