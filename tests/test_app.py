@@ -32,6 +32,15 @@ def test_dashboard_page_loads():
     assert response.status_code == 200
     assert b"Welcome back" in response.data
     assert b"Add / Remove Account" in response.data
+    assert b"Recent Transactions" in response.data
+    assert b"See All Transactions" in response.data
+
+
+def test_all_transactions_page_loads():
+    client, _ = _build_client_and_app()
+    response = client.get("/transactions")
+    assert response.status_code == 200
+    assert b"All Transactions" in response.data
 
 
 def test_manage_accounts_page_loads():
@@ -116,6 +125,86 @@ def test_account_transactions_api_empty_list_for_new_account():
     payload = response.get_json()
     assert payload["account"]["name"] == "Savings"
     assert payload["transactions"] == []
+
+
+def test_recent_transactions_api_includes_account_name_and_newest_first():
+    client, app = _build_client_and_app()
+
+    with app.app_context():
+        checking = Account.query.filter_by(name="Checking").first()
+
+        db.session.add(
+            Transaction(
+                account_id=checking.id,
+                transaction_name="Older",
+                amount=Decimal("2.00"),
+                category="Food",
+                transaction_type="expense",
+                occurred_at=db.func.datetime("2026-01-01 10:00:00"),
+            )
+        )
+        db.session.add(
+            Transaction(
+                account_id=checking.id,
+                transaction_name="Newer",
+                amount=Decimal("3.00"),
+                category="Food",
+                transaction_type="expense",
+                occurred_at=db.func.datetime("2026-01-01 11:00:00"),
+            )
+        )
+        db.session.commit()
+
+    response = client.get("/api/transactions/recent?limit=5")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert len(payload["transactions"]) == 2
+    assert payload["transactions"][0]["transaction_name"] == "Newer"
+    assert payload["transactions"][0]["account_name"] == "Checking"
+
+
+def test_all_transactions_api_includes_account_name_and_newest_first():
+    client, app = _build_client_and_app()
+
+    with app.app_context():
+        checking = Account.query.filter_by(name="Checking").first()
+        savings = Account(
+            name="Savings",
+            account_type="savings",
+            starting_balance=Decimal("250.00"),
+            current_balance=Decimal("250.00"),
+        )
+        db.session.add(savings)
+        db.session.commit()
+
+        db.session.add(
+            Transaction(
+                account_id=checking.id,
+                transaction_name="First",
+                amount=Decimal("2.00"),
+                category="Food",
+                transaction_type="expense",
+                occurred_at=db.func.datetime("2026-01-01 10:00:00"),
+            )
+        )
+        db.session.add(
+            Transaction(
+                account_id=savings.id,
+                transaction_name="Second",
+                amount=Decimal("6.00"),
+                category="Income",
+                transaction_type="deposit",
+                occurred_at=db.func.datetime("2026-01-01 11:00:00"),
+            )
+        )
+        db.session.commit()
+
+    response = client.get("/api/transactions")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert len(payload["transactions"]) == 2
+    assert payload["transactions"][0]["transaction_name"] == "Second"
+    assert payload["transactions"][0]["account_name"] == "Savings"
 
 
 def test_expense_decreases_balance():

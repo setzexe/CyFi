@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>All Transactions | CyFi</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='transactions.css') }}" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">CYFI</p>
+        <h1>All Transactions</h1>
+        <p class="subtitle">Newest first across all accounts.</p>
+      </div>
+      <a class="ghost-btn" href="{{ url_for('home') }}">Back to Dashboard</a>
+    </header>
+
+    <main class="layout">
+      <section class="card">
+        <h2>Transaction History</h2>
+        <ul id="transactionsList" class="stack"></ul>
+      </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='transactions.js') }}"></script>
+  </body>
+</html>

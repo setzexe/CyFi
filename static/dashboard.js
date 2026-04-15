@@ -22,6 +22,22 @@ function formatMoney(value) {
   }).format(Number.isFinite(parsed) ? parsed : 0);
 }
 
+function formatDateTime(value) {
+  if (!value) {
+    return "Unknown date";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "Unknown date";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(parsed);
+}
+
 function clearChildren(node) {
   while (node.firstChild) {
     node.removeChild(node.firstChild);
@@ -113,13 +129,13 @@ function renderRecent(payload) {
 
   if (!transactions.length) {
     const empty = document.createElement("li");
-    empty.textContent = "No purchases yet.";
+    empty.textContent = "No recent transactions yet.";
     ui.recentList.appendChild(empty);
     return;
   }
 
   for (const tx of transactions) {
-    const detail = `${tx.category} · ${tx.transaction_type}`;
+    const detail = `${tx.account_name} · ${formatDateTime(tx.occurred_at)}`;
     ui.recentList.appendChild(listItem(tx.transaction_name, formatMoney(tx.amount), detail));
   }
 }
@@ -145,7 +161,7 @@ async function loadDashboard() {
   try {
     const [summary, recent, bills] = await Promise.all([
       fetch("/api/accounts/summary").then(toJson),
-      fetch("/api/transactions/recent?limit=10").then(toJson),
+      fetch("/api/transactions/recent?limit=5").then(toJson),
       fetch("/api/bills/upcoming?days=45").then(toJson),
     ]);
 

@@ -135,6 +135,10 @@ def create_app(test_config: dict | None = None) -> Flask:
             account_balance=_money(account.current_balance or Decimal("0.00")),
         )
 
+    @app.get("/transactions")
+    def all_transactions_page():
+        return render_template("transactions.html")
+
     @app.get("/health/db")
     def db_health():
         try:
@@ -248,6 +252,30 @@ def create_app(test_config: dict | None = None) -> Flask:
                     {
                         "id": tx.id,
                         "account_id": tx.account_id,
+                        "account_name": tx.account.name if tx.account is not None else "Unknown",
+                        "transaction_name": tx.transaction_name,
+                        "amount": _money(tx.amount),
+                        "category": tx.category,
+                        "transaction_type": tx.transaction_type,
+                        "note": tx.note,
+                        "occurred_at": _serialize_datetime(tx.occurred_at),
+                    }
+                    for tx in items
+                ]
+            }
+        )
+
+    @app.get("/api/transactions")
+    def list_all_transactions():
+        items = Transaction.query.order_by(Transaction.occurred_at.desc(), Transaction.id.desc()).all()
+
+        return jsonify(
+            {
+                "transactions": [
+                    {
+                        "id": tx.id,
+                        "account_id": tx.account_id,
+                        "account_name": tx.account.name if tx.account is not None else "Unknown",
                         "transaction_name": tx.transaction_name,
                         "amount": _money(tx.amount),
                         "category": tx.category,
