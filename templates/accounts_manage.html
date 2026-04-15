@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Manage Accounts | CyFi</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='account_manage.css') }}" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">CYFI</p>
+        <h1>Manage Accounts</h1>
+        <p class="subtitle">Create new accounts or remove old ones</p>
+      </div>
+      <a class="ghost-btn" href="{{ url_for('home') }}">Back to Dashboard</a>
+    </header>
+
+    <main class="layout">
+      <section class="left-column">
+        <article class="card">
+          <h2>Account Summaries</h2>
+          <p class="total">Total Balance: <strong id="manageTotalBalance">$0.00</strong></p>
+          <ul id="manageAccountsList" class="stack"></ul>
+        </article>
+
+        <article class="card">
+          <h2>Account History</h2>
+          <ul id="manageHistoryList" class="stack"></ul>
+        </article>
+      </section>
+
+      <section class="card right-column">
+        <h2>Add or Delete Account</h2>
+        <p class="hint">All actions are recorded with a timestamp.</p>
+
+        <form id="accountActionForm" novalidate>
+          <label for="accountAction">Action</label>
+          <select id="accountAction" required>
+            <option value="create">Add Account</option>
+            <option value="delete">Delete Account</option>
+          </select>
+
+          <div id="addFields">
+            <label for="newAccountName">Account Name</label>
+            <input id="newAccountName" type="text" maxlength="80" placeholder="Brokerage, Travel, etc" required />
+
+            <label for="newStartingBalance">Starting Balance</label>
+            <input id="newStartingBalance" type="number" step="0.01" placeholder="0.00" required />
+
+            <label for="newAccountNote">Note (optional)</label>
+            <input id="newAccountNote" type="text" placeholder="Optional context" />
+          </div>
+
+          <div id="deleteFields" class="hidden">
+            <label for="deleteAccountId">Account to Delete</label>
+            <select id="deleteAccountId"></select>
+
+            <label for="deleteReason">Reason (optional)</label>
+            <input id="deleteReason" type="text" placeholder="Optional context" />
+
+            <label class="confirm-row" for="deleteConfirm">
+              <input id="deleteConfirm" type="checkbox" />
+              <span>I confirm this account should be deleted.</span>
+            </label>
+          </div>
+
+          <button id="submitActionBtn" class="primary-btn" type="submit">Create Account</button>
+        </form>
+
+        <p id="actionMessage" class="message" role="status" aria-live="polite"></p>
+      </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='account_manage.js') }}"></script>
+  </body>
+</html>

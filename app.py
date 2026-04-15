@@ -6,7 +6,8 @@ from decimal import Decimal, InvalidOperation
 from flask import Flask, jsonify, render_template, request
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy import inspect, text
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -92,11 +93,34 @@ def create_app(test_config: dict | None = None) -> Flask:
     migrate.init_app(app, db)
 
     # Register model metadata for migrations.
-    from models import Account, RecurringBill, Transaction  # noqa: F401
+    from models import Account, AccountHistoryEvent, RecurringBill, Transaction  # noqa: F401
+
+    def can_record_account_events() -> bool:
+        try:
+            return inspect(db.engine).has_table("account_history_events")
+        except SQLAlchemyError:
+            return False
+
+    def record_account_event(action: str, account_name: str, account_balance: Decimal, note: str | None = None):
+        if not can_record_account_events():
+            return
+
+        db.session.add(
+            AccountHistoryEvent(
+                action=action,
+                account_name=account_name,
+                account_balance=account_balance,
+                note=note,
+            )
+        )
 
     @app.get("/")
     def home():
         return render_template("dashboard.html")
+
+    @app.get("/accounts/manage")
+    def manage_accounts_page():
+        return render_template("accounts_manage.html")
 
     @app.get("/health/db")
     def db_health():
@@ -243,6 +267,113 @@ def create_app(test_config: dict | None = None) -> Flask:
                 ],
             }
         )
+
+    @app.get("/api/accounts/history")
+    def account_history():
+        limit = request.args.get("limit", default=50, type=int)
+        if limit is None or limit < 1:
+            limit = 50
+        limit = min(limit, 200)
+
+        try:
+            entries = (
+                AccountHistoryEvent.query.order_by(AccountHistoryEvent.created_at.desc(), AccountHistoryEvent.id.desc())
+                .limit(limit)
+                .all()
+            )
+        except SQLAlchemyError:
+            # Keep account management usable if migrations have not yet been applied.
+            return jsonify({"events": []})
+
+        return jsonify(
+            {
+                "events": [
+                    {
+                        "id": event.id,
+                        "action": event.action,
+                        "account_name": event.account_name,
+                        "account_balance": _money(event.account_balance),
+                        "note": event.note,
+                        "created_at": _serialize_datetime(event.created_at),
+                    }
+                    for event in entries
+                ]
+            }
+        )
+
+    @app.post("/api/accounts")
+    def create_account():
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({"error": "Request body must be a JSON object"}), 400
+
+        name = str(payload.get("name", "")).strip()
+        if not name:
+            return jsonify({"error": "name is required"}), 400
+        if len(name) > 80:
+            return jsonify({"error": "name must be 80 characters or fewer"}), 400
+
+        try:
+            starting_balance = Decimal(str(payload.get("starting_balance", "0")))
+        except (InvalidOperation, ValueError):
+            return jsonify({"error": "starting_balance must be numeric"}), 400
+
+        note = str(payload.get("note", "")).strip() or None
+
+        account = Account(
+            name=name,
+            account_type="custom",
+            starting_balance=starting_balance,
+            current_balance=starting_balance,
+        )
+
+        db.session.add(account)
+        record_account_event("created", account.name, account.current_balance, note)
+
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            return jsonify({"error": "Account name already exists"}), 409
+
+        return (
+            jsonify(
+                {
+                    "account": {
+                        "id": account.id,
+                        "name": account.name,
+                        "account_type": account.account_type,
+                        "starting_balance": _money(account.starting_balance),
+                        "current_balance": _money(account.current_balance),
+                    }
+                }
+            ),
+            201,
+        )
+
+    @app.delete("/api/accounts/<int:account_id>")
+    def delete_account(account_id: int):
+        payload = request.get_json(silent=True) or {}
+        if not isinstance(payload, dict):
+            return jsonify({"error": "Request body must be a JSON object"}), 400
+
+        confirm = payload.get("confirm")
+        if confirm is not True:
+            return jsonify({"error": "confirm must be true to delete an account"}), 400
+
+        account = db.session.get(Account, account_id)
+        if account is None:
+            return jsonify({"error": "Account not found"}), 404
+
+        reason = str(payload.get("reason", "")).strip() or None
+        account_name = account.name
+        account_balance = account.current_balance or Decimal("0.00")
+
+        record_account_event("deleted", account_name, account_balance, reason)
+        db.session.delete(account)
+        db.session.commit()
+
+        return jsonify({"deleted": {"id": account_id, "name": account_name}}), 200
 
     @app.get("/api/bills/upcoming")
     def upcoming_bills():
