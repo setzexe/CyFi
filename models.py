@@ -31,6 +31,22 @@ class Account(db.Model):
     )
 
 
+class AccountHistoryEvent(db.Model):
+    __tablename__ = "account_history_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+    action = db.Column(db.String(20), nullable=False)
+    account_name = db.Column(db.String(80), nullable=False)
+    account_balance = db.Column(db.Numeric(12, 2), nullable=False, default=Decimal("0.00"))
+    note = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        index=True,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+
 class Transaction(db.Model):
     __tablename__ = "transactions"
 
