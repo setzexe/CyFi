@@ -44,14 +44,22 @@ async function toJson(response) {
   return body;
 }
 
-function listItem(title, value, detail) {
+function listItem(title, value, detail, options = {}) {
   const li = document.createElement("li");
 
   const top = document.createElement("div");
   top.className = "item-top";
 
   const strong = document.createElement("strong");
-  strong.textContent = title;
+  if (options.titleHref) {
+    const link = document.createElement("a");
+    link.className = "item-link";
+    link.href = options.titleHref;
+    link.textContent = title;
+    strong.appendChild(link);
+  } else {
+    strong.textContent = title;
+  }
 
   const amount = document.createElement("span");
   amount.textContent = value;
@@ -88,8 +96,9 @@ function renderAccounts(summary) {
   }
 
   for (const account of accounts) {
-    const details = `${account.account_type} · started ${formatMoney(account.starting_balance)}`;
-    ui.accountsList.appendChild(listItem(account.name, formatMoney(account.current_balance), details));
+    const details = `Starting Balance: ${formatMoney(account.starting_balance)}`;
+    const href = `/accounts/${account.id}/transactions`;
+    ui.accountsList.appendChild(listItem(account.name, formatMoney(account.current_balance), details, { titleHref: href }));
 
     const option = document.createElement("option");
     option.value = String(account.id);

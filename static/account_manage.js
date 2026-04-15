@@ -106,7 +106,7 @@ function renderAccountSummaries(summary) {
   }
 
   for (const account of accounts) {
-    const details = `${account.account_type} · started ${formatMoney(account.starting_balance)}`;
+    const details = `Starting Balance: ${formatMoney(account.starting_balance)}`;
     ui.manageAccountsList.appendChild(listItem(account.name, formatMoney(account.current_balance), details));
 
     const option = document.createElement("option");
