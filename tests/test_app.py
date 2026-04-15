@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from app import create_app, db
-from models import Account, AccountHistoryEvent
+from models import Account, AccountHistoryEvent, Transaction
 
 
 def _build_client_and_app():
@@ -39,6 +39,83 @@ def test_manage_accounts_page_loads():
     response = client.get("/accounts/manage")
     assert response.status_code == 200
     assert b"Manage Accounts" in response.data
+
+
+def test_account_transactions_page_loads():
+    client, app = _build_client_and_app()
+
+    with app.app_context():
+        account = Account.query.filter_by(name="Checking").first()
+        account_id = account.id
+
+    response = client.get(f"/accounts/{account_id}/transactions")
+    assert response.status_code == 200
+    assert b"Transactions" in response.data
+
+
+def test_account_transactions_api_filters_to_account_only():
+    client, app = _build_client_and_app()
+
+    with app.app_context():
+        checking = Account.query.filter_by(name="Checking").first()
+        savings = Account(
+            name="Savings",
+            account_type="savings",
+            starting_balance=Decimal("250.00"),
+            current_balance=Decimal("250.00"),
+        )
+        db.session.add(savings)
+        db.session.commit()
+
+        db.session.add(
+            Transaction(
+                account_id=checking.id,
+                transaction_name="Coffee",
+                amount=Decimal("4.00"),
+                category="Food",
+                transaction_type="expense",
+            )
+        )
+        db.session.add(
+            Transaction(
+                account_id=savings.id,
+                transaction_name="Interest",
+                amount=Decimal("5.00"),
+                category="Income",
+                transaction_type="deposit",
+            )
+        )
+        db.session.commit()
+
+        checking_id = checking.id
+
+    response = client.get(f"/api/accounts/{checking_id}/transactions")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["account"]["name"] == "Checking"
+    assert len(payload["transactions"]) == 1
+    assert payload["transactions"][0]["transaction_name"] == "Coffee"
+
+
+def test_account_transactions_api_empty_list_for_new_account():
+    client, app = _build_client_and_app()
+
+    with app.app_context():
+        savings = Account(
+            name="Savings",
+            account_type="savings",
+            starting_balance=Decimal("250.00"),
+            current_balance=Decimal("250.00"),
+        )
+        db.session.add(savings)
+        db.session.commit()
+        savings_id = savings.id
+
+    response = client.get(f"/api/accounts/{savings_id}/transactions")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["account"]["name"] == "Savings"
+    assert payload["transactions"] == []
 
 
 def test_expense_decreases_balance():

@@ -3,7 +3,7 @@ import calendar
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, abort, jsonify, render_template, request
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -121,6 +121,19 @@ def create_app(test_config: dict | None = None) -> Flask:
     @app.get("/accounts/manage")
     def manage_accounts_page():
         return render_template("accounts_manage.html")
+
+    @app.get("/accounts/<int:account_id>/transactions")
+    def account_transactions_page(account_id: int):
+        account = db.session.get(Account, account_id)
+        if account is None:
+            abort(404)
+
+        return render_template(
+            "account_transactions.html",
+            account_id=account.id,
+            account_name=account.name,
+            account_balance=_money(account.current_balance or Decimal("0.00")),
+        )
 
     @app.get("/health/db")
     def db_health():
@@ -244,6 +257,41 @@ def create_app(test_config: dict | None = None) -> Flask:
                     }
                     for tx in items
                 ]
+            }
+        )
+
+    @app.get("/api/accounts/<int:account_id>/transactions")
+    def list_account_transactions(account_id: int):
+        account = db.session.get(Account, account_id)
+        if account is None:
+            return jsonify({"error": "Account not found"}), 404
+
+        items = (
+            Transaction.query.filter_by(account_id=account_id)
+            .order_by(Transaction.occurred_at.desc(), Transaction.id.desc())
+            .all()
+        )
+
+        return jsonify(
+            {
+                "account": {
+                    "id": account.id,
+                    "name": account.name,
+                    "current_balance": _money(account.current_balance or Decimal("0.00")),
+                },
+                "transactions": [
+                    {
+                        "id": tx.id,
+                        "account_id": tx.account_id,
+                        "transaction_name": tx.transaction_name,
+                        "amount": _money(tx.amount),
+                        "category": tx.category,
+                        "transaction_type": tx.transaction_type,
+                        "note": tx.note,
+                        "occurred_at": _serialize_datetime(tx.occurred_at),
+                    }
+                    for tx in items
+                ],
             }
         )
 
