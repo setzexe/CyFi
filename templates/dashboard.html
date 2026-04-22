@@ -29,7 +29,13 @@
           <select id="transactionType" required>
             <option value="expense">Expense</option>
             <option value="deposit">Deposit</option>
+            <option value="recurring">Recurring</option>
           </select>
+
+          <div id="recurringDateRow" class="hidden">
+            <label for="recurringDueDate">Date for Recurrence</label>
+            <input id="recurringDueDate" type="date" />
+          </div>
 
           <label for="transactionName">Name</label>
           <input id="transactionName" type="text" placeholder="Coffee, Payroll, Gas" required />
@@ -49,22 +55,26 @@
         <p id="formMessage" class="message" role="status" aria-live="polite"></p>
       </section>
 
-      <section class="card">
+      <section class="card account-card">
         <h2>Account Summaries</h2>
         <p class="total">Total Balance: <strong id="totalBalance">$0.00</strong></p>
         <ul id="accountsList" class="stack"></ul>
         <a class="secondary-btn" href="{{ url_for('manage_accounts_page') }}">Add / Remove Account</a>
       </section>
 
-      <section class="card">
+      <section class="card recent-card">
         <h2>Recent Transactions</h2>
         <ul id="recentList" class="stack"></ul>
         <a class="secondary-btn" href="{{ url_for('all_transactions_page') }}">See All Transactions</a>
       </section>
 
-      <section class="card">
-        <h2>Upcoming Bills</h2>
+      <section class="card bills-card">
+        <h2>Recurring Bills</h2>
+        <p class="hint bills-note">Choose 'Recurring' in Type to add recurring bills here.</p>
         <ul id="billsList" class="stack"></ul>
+        <label for="removeRecurringBillId">Remove Recurring Bill</label>
+        <select id="removeRecurringBillId"></select>
+        <button id="removeRecurringBillBtn" class="secondary-btn" type="button">Remove Selected Bill</button>
       </section>
     </main>
 
