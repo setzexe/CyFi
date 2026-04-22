@@ -48,6 +48,16 @@ def _parse_occurred_at(value: str | None) -> datetime | None:
         return None
 
 
+def _parse_due_date(value: str | None) -> date | None:
+    if not value:
+        return None
+
+    try:
+        return date.fromisoformat(value.strip())
+    except ValueError:
+        return None
+
+
 def _money(value: Decimal) -> str:
     return format(value, ".2f")
 
@@ -186,14 +196,21 @@ def create_app(test_config: dict | None = None) -> Flask:
         transaction_type = str(payload["transaction_type"]).strip().lower()
         if transaction_type in {"expense", "debit"}:
             balance_delta = -amount
+        elif transaction_type == "recurring":
+            balance_delta = -amount
         elif transaction_type in {"income", "credit", "deposit"}:
             balance_delta = amount
         else:
-            return jsonify({"error": "transaction_type must be expense/debit or income/credit/deposit"}), 400
+            return jsonify({"error": "transaction_type must be expense/debit/recurring or income/credit/deposit"}), 400
 
         occurred_at = _parse_occurred_at(payload.get("occurred_at"))
         if payload.get("occurred_at") and occurred_at is None:
             return jsonify({"error": "occurred_at must be valid ISO datetime"}), 400
+
+        is_recurring_type = transaction_type == "recurring"
+        recurring_due_date = _parse_due_date(payload.get("recurring_due_date"))
+        if is_recurring_type and recurring_due_date is None:
+            return jsonify({"error": "recurring_due_date must be valid YYYY-MM-DD when type is Recurring"}), 400
 
         transaction = Transaction(
             account_id=account.id,
@@ -205,7 +222,36 @@ def create_app(test_config: dict | None = None) -> Flask:
             occurred_at=occurred_at or datetime.now(timezone.utc),
         )
 
-        account.current_balance = (account.current_balance or Decimal("0.00")) + balance_delta
+        next_balance = (account.current_balance or Decimal("0.00")) + balance_delta
+        if next_balance < Decimal("0.00"):
+            return jsonify({"error": "Insufficient funds: transaction would make this account balance negative."}), 400
+
+        account.current_balance = next_balance
+
+        if is_recurring_type and recurring_due_date is not None:
+            due_day = recurring_due_date.day
+            existing_bill = (
+                RecurringBill.query.filter_by(
+                    account_id=account.id,
+                    name=transaction_name,
+                    due_day=due_day,
+                    active=True,
+                )
+                .order_by(RecurringBill.id.desc())
+                .first()
+            )
+            if existing_bill is None:
+                db.session.add(
+                    RecurringBill(
+                        account_id=account.id,
+                        name=transaction_name,
+                        amount=amount,
+                        category="Recurring",
+                        due_day=due_day,
+                        frequency="monthly",
+                        active=True,
+                    )
+                )
 
         db.session.add(transaction)
         db.session.commit()
@@ -485,6 +531,41 @@ def create_app(test_config: dict | None = None) -> Flask:
 
         upcoming.sort(key=lambda item: item["next_due_date"])
         return jsonify({"days": days, "bills": upcoming})
+
+    @app.get("/api/bills/recurring")
+    def list_recurring_bills():
+        bills = (
+            RecurringBill.query.filter_by(active=True)
+            .order_by(RecurringBill.name.asc(), RecurringBill.id.asc())
+            .all()
+        )
+
+        return jsonify(
+            {
+                "bills": [
+                    {
+                        "id": bill.id,
+                        "account_id": bill.account_id,
+                        "name": bill.name,
+                        "amount": _money(bill.amount),
+                        "due_day": bill.due_day,
+                        "frequency": bill.frequency,
+                    }
+                    for bill in bills
+                ]
+            }
+        )
+
+    @app.delete("/api/bills/<int:bill_id>")
+    def delete_recurring_bill(bill_id: int):
+        bill = db.session.get(RecurringBill, bill_id)
+        if bill is None or not bill.active:
+            return jsonify({"error": "Recurring bill not found"}), 404
+
+        bill.active = False
+        db.session.commit()
+
+        return jsonify({"deleted": {"id": bill.id, "name": bill.name}}), 200
 
     return app
 

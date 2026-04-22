@@ -4,6 +4,8 @@ const ui = {
   formMessage: document.getElementById("formMessage"),
   accountId: document.getElementById("accountId"),
   transactionType: document.getElementById("transactionType"),
+  recurringDateRow: document.getElementById("recurringDateRow"),
+  recurringDueDate: document.getElementById("recurringDueDate"),
   transactionName: document.getElementById("transactionName"),
   amount: document.getElementById("amount"),
   category: document.getElementById("category"),
@@ -12,6 +14,8 @@ const ui = {
   accountsList: document.getElementById("accountsList"),
   recentList: document.getElementById("recentList"),
   billsList: document.getElementById("billsList"),
+  removeRecurringBillId: document.getElementById("removeRecurringBillId"),
+  removeRecurringBillBtn: document.getElementById("removeRecurringBillBtn"),
 };
 
 function formatMoney(value) {
@@ -140,34 +144,55 @@ function renderRecent(payload) {
   }
 }
 
-function renderBills(payload) {
+function renderBills(payload, recurringPayload) {
   clearChildren(ui.billsList);
+  clearChildren(ui.removeRecurringBillId);
+
   const bills = payload.bills || [];
+  const recurringBills = recurringPayload.bills || [];
 
   if (!bills.length) {
     const empty = document.createElement("li");
     empty.textContent = "No upcoming bills found.";
     ui.billsList.appendChild(empty);
-    return;
   }
 
   for (const bill of bills) {
     const detail = `Due ${bill.next_due_date} · in ${bill.days_until_due} day(s)`;
     ui.billsList.appendChild(listItem(bill.name, formatMoney(bill.amount), detail));
   }
+
+  if (!recurringBills.length) {
+    const noneOption = document.createElement("option");
+    noneOption.value = "";
+    noneOption.textContent = "No recurring bills available";
+    ui.removeRecurringBillId.appendChild(noneOption);
+    ui.removeRecurringBillBtn.disabled = true;
+    return;
+  }
+
+  for (const bill of recurringBills) {
+    const option = document.createElement("option");
+    option.value = String(bill.id);
+    option.textContent = `${bill.name} (${formatMoney(bill.amount)})`;
+    ui.removeRecurringBillId.appendChild(option);
+  }
+
+  ui.removeRecurringBillBtn.disabled = false;
 }
 
 async function loadDashboard() {
   try {
-    const [summary, recent, bills] = await Promise.all([
+    const [summary, recent, bills, recurringBills] = await Promise.all([
       fetch("/api/accounts/summary").then(toJson),
       fetch("/api/transactions/recent?limit=5").then(toJson),
       fetch("/api/bills/upcoming?days=45").then(toJson),
+      fetch("/api/bills/recurring").then(toJson),
     ]);
 
     renderAccounts(summary);
     renderRecent(recent);
-    renderBills(bills);
+    renderBills(bills, recurringBills);
   } catch (error) {
     showMessage(error.message, "error");
   }
@@ -192,7 +217,7 @@ function validateForm() {
     throw new Error("Amount must be greater than 0.");
   }
 
-  return {
+  const payload = {
     account_id: accountId,
     transaction_name: transactionName,
     amount: amount.toFixed(2),
@@ -200,6 +225,22 @@ function validateForm() {
     transaction_type: ui.transactionType.value,
     note: ui.note.value.trim(),
   };
+
+  if (ui.transactionType.value === "recurring") {
+    const dueDateInput = ui.recurringDueDate.value.trim();
+    if (!dueDateInput) {
+      throw new Error("Recurring bills require a due date.");
+    }
+
+    const parsed = new Date(`${dueDateInput}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new Error("Due date must be valid and formatted as YYYY-MM-DD.");
+    }
+
+    payload.recurring_due_date = dueDateInput;
+  }
+
+  return payload;
 }
 
 async function handleSubmit(event) {
@@ -222,7 +263,32 @@ async function handleSubmit(event) {
     }).then(toJson);
 
     ui.form.reset();
+    syncRecurringFields();
     showMessage("Saved and refreshed.", "success");
+    await loadDashboard();
+  } catch (error) {
+    showMessage(error.message, "error");
+  }
+}
+
+function syncRecurringFields() {
+  const isRecurring = ui.transactionType.value === "recurring";
+  ui.recurringDateRow.classList.toggle("hidden", !isRecurring);
+}
+
+async function handleRemoveRecurringBill() {
+  const billId = Number.parseInt(ui.removeRecurringBillId.value, 10);
+  if (!Number.isInteger(billId) || billId < 1) {
+    showMessage("Select a recurring bill to remove.", "error");
+    return;
+  }
+
+  try {
+    await fetch(`/api/bills/${billId}`, {
+      method: "DELETE",
+    }).then(toJson);
+
+    showMessage("Recurring bill removed.", "success");
     await loadDashboard();
   } catch (error) {
     showMessage(error.message, "error");
@@ -231,5 +297,8 @@ async function handleSubmit(event) {
 
 ui.refreshBtn.addEventListener("click", loadDashboard);
 ui.form.addEventListener("submit", handleSubmit);
+ui.transactionType.addEventListener("change", syncRecurringFields);
+ui.removeRecurringBillBtn.addEventListener("click", handleRemoveRecurringBill);
 
+syncRecurringFields();
 loadDashboard();

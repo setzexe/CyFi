@@ -1,7 +1,8 @@
+from datetime import date
 from decimal import Decimal
 
 from app import create_app, db
-from models import Account, AccountHistoryEvent, Transaction
+from models import Account, AccountHistoryEvent, RecurringBill, Transaction
 
 
 def _build_client_and_app():
@@ -273,6 +274,148 @@ def test_bad_input_returns_error():
         },
     )
     assert response.status_code == 400
+
+
+def test_transaction_cannot_make_balance_negative():
+    client, app = _build_client_and_app()
+
+    with app.app_context():
+        account = Account.query.filter_by(name="Checking").first()
+        account_id = account.id
+
+    response = client.post(
+        "/api/transactions",
+        json={
+            "account_id": account_id,
+            "transaction_name": "Large Purchase",
+            "amount": "150.00",
+            "category": "Shopping",
+            "transaction_type": "expense",
+        },
+    )
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "Insufficient funds: transaction would make this account balance negative."
+
+    with app.app_context():
+        unchanged = db.session.get(Account, account_id)
+        assert str(unchanged.current_balance) == "100.00"
+
+
+def test_recurring_transaction_creates_recurring_bill():
+    client, app = _build_client_and_app()
+
+    with app.app_context():
+        account = Account.query.filter_by(name="Checking").first()
+        account_id = account.id
+
+    response = client.post(
+        "/api/transactions",
+        json={
+            "account_id": account_id,
+            "transaction_name": "HOA",
+            "amount": "30.00",
+            "category": "Bills",
+            "transaction_type": "recurring",
+            "recurring_due_date": "2026-04-22",
+        },
+    )
+    assert response.status_code == 201
+
+    with app.app_context():
+        recurring = RecurringBill.query.filter_by(account_id=account_id, name="HOA", active=True).first()
+        assert recurring is not None
+        assert recurring.due_day == 22
+        assert str(recurring.amount) == "30.00"
+
+
+def test_recurring_transaction_requires_due_date():
+    client, app = _build_client_and_app()
+
+    with app.app_context():
+        account = Account.query.filter_by(name="Checking").first()
+        account_id = account.id
+
+    response = client.post(
+        "/api/transactions",
+        json={
+            "account_id": account_id,
+            "transaction_name": "HOA",
+            "amount": "300.00",
+            "category": "Bills",
+            "transaction_type": "recurring",
+        },
+    )
+    assert response.status_code == 400
+
+
+def test_upcoming_bills_are_sorted_by_next_due_date():
+    client, app = _build_client_and_app()
+
+    with app.app_context():
+        account = Account.query.filter_by(name="Checking").first()
+        today = date.today()
+        first_due_day = today.day
+        second_due_day = min(today.day + 1, 28)
+
+        db.session.add(
+            RecurringBill(
+                account_id=account.id,
+                name="Phone",
+                amount=Decimal("55.00"),
+                category="Recurring",
+                due_day=second_due_day,
+                frequency="monthly",
+                active=True,
+            )
+        )
+        db.session.add(
+            RecurringBill(
+                account_id=account.id,
+                name="Rent",
+                amount=Decimal("900.00"),
+                category="Recurring",
+                due_day=first_due_day,
+                frequency="monthly",
+                active=True,
+            )
+        )
+        db.session.commit()
+
+    response = client.get("/api/bills/upcoming?days=45")
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert len(payload["bills"]) >= 2
+    assert payload["bills"][0]["name"] == "Rent"
+
+
+def test_recurring_bill_can_be_removed_and_hidden_from_active_list():
+    client, app = _build_client_and_app()
+
+    with app.app_context():
+        account = Account.query.filter_by(name="Checking").first()
+        bill = RecurringBill(
+            account_id=account.id,
+            name="Spotify",
+            amount=Decimal("9.99"),
+            category="Recurring",
+            due_day=15,
+            frequency="monthly",
+            active=True,
+        )
+        db.session.add(bill)
+        db.session.commit()
+        bill_id = bill.id
+
+    list_before = client.get("/api/bills/recurring")
+    assert list_before.status_code == 200
+    assert any(item["id"] == bill_id for item in list_before.get_json()["bills"])
+
+    deleted = client.delete(f"/api/bills/{bill_id}")
+    assert deleted.status_code == 200
+
+    list_after = client.get("/api/bills/recurring")
+    assert list_after.status_code == 200
+    assert all(item["id"] != bill_id for item in list_after.get_json()["bills"])
 
 
 def test_create_account_adds_history_event():
