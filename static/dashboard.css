@@ -231,7 +231,7 @@ h2 {
 }
 
 .hint {
-  margin: 0 0 16px;
+  margin: 0 0 8px;
   color: var(--muted);
   font-size: 1rem;
   font-weight: 700;
@@ -239,7 +239,7 @@ h2 {
 
 label {
   display: block;
-  margin: 14px 0 7px;
+  margin: 10px 0 6px;
   color: var(--muted);
   font-size: 1rem;
   font-weight: 800;
@@ -263,6 +263,17 @@ textarea {
   font-size: 1rem;
 }
 
+input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
 input::placeholder,
 textarea::placeholder {
   color: rgba(75,104,122,0.52);
@@ -282,6 +293,7 @@ textarea:focus {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: 16px;
+  row-gap: 0;
   align-items: end;
 }
 
@@ -303,7 +315,7 @@ textarea:focus {
 .primary-btn,
 .secondary-btn,
 .ghost-btn {
-  border: 1px solid rgba(255,255,255,0.82);
+  border: 1px solid rgba(255,255,255,0.88);
   cursor: pointer;
   text-decoration: none;
   font: inherit;
@@ -348,25 +360,30 @@ textarea:focus {
   min-height: 44px;
   padding: 10px 20px;
   border-radius: 999px;
-  color: var(--ink);
+  color: #eff9ff;
+  text-shadow: 0 1px 2px rgba(0, 76, 150, 0.42);
   background:
-    linear-gradient(to bottom, rgba(255,255,255,0.82), rgba(255,255,255,0.08) 45%),
-    linear-gradient(to bottom, rgba(255,255,255,0.92), rgba(226,247,255,0.68));
+    linear-gradient(to bottom, rgba(255,255,255,0.76), rgba(255,255,255,0) 45%),
+    linear-gradient(to bottom, #8fd0ff 0%, #54b1f6 48%, #2b94ea 49%, #1275d7 100%);
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,0.96),
-    inset 0 -4px 10px rgba(43,141,201,0.10),
-    0 9px 20px rgba(23,83,130,0.18);
+    inset 0 -5px 12px rgba(0,64,130,0.18),
+    0 10px 22px rgba(0,93,170,0.20);
 }
 
 .secondary-btn:hover,
 .ghost-btn:hover {
-  filter: brightness(1.04);
+  filter: brightness(1.06) saturate(1.04);
   transform: translateY(-1px);
 }
 
 .ghost-btn {
   height: fit-content;
   align-self: start;
+}
+
+.secondary-btn {
+  min-width: 0;
 }
 
 .total {
@@ -400,6 +417,29 @@ textarea:focus {
 .account-card .secondary-btn,
 .account-card .ghost-btn {
   margin-top: 14px;
+}
+
+.recent-card .secondary-btn {
+  margin-top: 14px;
+}
+
+.bills-card .secondary-btn {
+  width: 100%;
+  display: flex;
+  margin-top: 14px;
+}
+
+.bills-card label {
+  margin-top: 16px;
+}
+
+.bills-card select {
+  margin-bottom: 0;
+}
+
+.bills-card .secondary-btn {
+  min-height: 46px;
+  margin-top: 12px;
 }
 
 .stack {
