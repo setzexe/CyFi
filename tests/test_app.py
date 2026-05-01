@@ -2,7 +2,8 @@ from datetime import date
 from decimal import Decimal
 
 from app import create_app, db
-from models import Account, AccountHistoryEvent, RecurringBill, Transaction
+from models import Account, AccountHistoryEvent, RecurringBill, Transaction, User
+from werkzeug.security import check_password_hash, generate_password_hash
 
 
 def _build_client_and_app():
@@ -15,7 +16,14 @@ def _build_client_and_app():
 
     with app.app_context():
         db.create_all()
+        user = User(
+            username="tester",
+            password_hash=generate_password_hash("password123"),
+        )
+        db.session.add(user)
+        db.session.flush()
         account = Account(
+            user_id=user.id,
             name="Checking",
             account_type="checking",
             starting_balance=Decimal("100.00"),
@@ -23,8 +31,140 @@ def _build_client_and_app():
         )
         db.session.add(account)
         db.session.commit()
+        app.config["TEST_USER_ID"] = user.id
 
-    return app.test_client(), app
+    client = app.test_client()
+    with client.session_transaction() as session:
+        session["user_id"] = app.config["TEST_USER_ID"]
+
+    return client, app
+
+
+def _test_user_id(app):
+    return app.config["TEST_USER_ID"]
+
+
+def test_signup_creates_user_with_hashed_password_and_session():
+    client, app = _build_client_and_app()
+    with client.session_transaction() as session:
+        session.clear()
+
+    response = client.post(
+        "/signup",
+        data={
+            "username": "new_user",
+            "password": "password123",
+            "confirm_password": "password123",
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/"
+
+    with app.app_context():
+        user = User.query.filter_by(username="new_user").first()
+        assert user is not None
+        assert user.password_hash != "password123"
+        assert check_password_hash(user.password_hash, "password123")
+
+    with client.session_transaction() as session:
+        assert session.get("user_id") == user.id
+
+
+def test_first_signup_claims_existing_legacy_accounts():
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+        }
+    )
+
+    with app.app_context():
+        db.create_all()
+        legacy_account = Account(
+            name="Legacy Checking",
+            account_type="checking",
+            starting_balance=Decimal("25.00"),
+            current_balance=Decimal("25.00"),
+        )
+        db.session.add(legacy_account)
+        db.session.commit()
+
+    client = app.test_client()
+    response = client.post(
+        "/signup",
+        data={
+            "username": "owner",
+            "password": "password123",
+            "confirm_password": "password123",
+        },
+    )
+
+    assert response.status_code == 302
+
+    with app.app_context():
+        user = User.query.filter_by(username="owner").first()
+        account = Account.query.filter_by(name="Legacy Checking").first()
+        assert account.user_id == user.id
+
+
+def test_login_sets_user_session():
+    client, app = _build_client_and_app()
+    with client.session_transaction() as session:
+        session.clear()
+
+    response = client.post(
+        "/login",
+        data={
+            "username": "tester",
+            "password": "password123",
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/"
+
+    with client.session_transaction() as session:
+        assert session.get("user_id") == _test_user_id(app)
+
+
+def test_logged_out_user_cannot_access_private_pages_or_apis():
+    client, _ = _build_client_and_app()
+    with client.session_transaction() as session:
+        session.clear()
+
+    page_response = client.get("/")
+    assert page_response.status_code == 302
+    assert "/login" in page_response.headers["Location"]
+
+    api_response = client.get("/api/accounts/summary")
+    assert api_response.status_code == 401
+    assert api_response.get_json()["error"] == "Login required"
+
+
+def test_user_cannot_read_another_users_account_transactions():
+    client, app = _build_client_and_app()
+
+    with app.app_context():
+        other_user = User(
+            username="other",
+            password_hash=generate_password_hash("password123"),
+        )
+        db.session.add(other_user)
+        db.session.flush()
+        other_account = Account(
+            user_id=other_user.id,
+            name="Other Checking",
+            account_type="checking",
+            starting_balance=Decimal("500.00"),
+            current_balance=Decimal("500.00"),
+        )
+        db.session.add(other_account)
+        db.session.commit()
+        other_account_id = other_account.id
+
+    response = client.get(f"/api/accounts/{other_account_id}/transactions")
+    assert response.status_code == 404
 
 
 def test_dashboard_page_loads():
@@ -69,6 +209,7 @@ def test_account_transactions_api_filters_to_account_only():
     with app.app_context():
         checking = Account.query.filter_by(name="Checking").first()
         savings = Account(
+            user_id=checking.user_id,
             name="Savings",
             account_type="savings",
             starting_balance=Decimal("250.00"),
@@ -112,6 +253,7 @@ def test_account_transactions_api_empty_list_for_new_account():
 
     with app.app_context():
         savings = Account(
+            user_id=_test_user_id(app),
             name="Savings",
             account_type="savings",
             starting_balance=Decimal("250.00"),
@@ -170,6 +312,7 @@ def test_all_transactions_api_includes_account_name_and_newest_first():
     with app.app_context():
         checking = Account.query.filter_by(name="Checking").first()
         savings = Account(
+            user_id=checking.user_id,
             name="Savings",
             account_type="savings",
             starting_balance=Decimal("250.00"),

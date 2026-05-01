@@ -3,8 +3,26 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>All Transactions | CyFi</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}" />
+    <title>Transactions | CyFi</title>
+    <link rel="preload" as="image" href="{{ url_for('static', filename='images/aero-bg.png') }}" />
+    <style>
+      html {
+        min-height: 100%;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        background:
+          linear-gradient(135deg, rgba(235, 255, 247, 0.18), rgba(88, 181, 255, 0.16), rgba(123, 219, 69, 0.12)),
+          url("{{ url_for('static', filename='images/aero-bg.png') }}"),
+          linear-gradient(135deg, #70c1ff, #a0d85a);
+        background-size: cover, cover, cover;
+        background-position: center center, center center, center center;
+        background-attachment: fixed, fixed, fixed;
+      }
+    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='transactions.css') }}" />
   </head>
   <body>
     <header class="topbar">
@@ -13,7 +31,12 @@
         <h1>All Transactions</h1>
         <p class="subtitle">Newest first across all accounts.</p>
       </div>
-      <a class="ghost-btn" href="{{ url_for('home') }}">Back to Dashboard</a>
+      <div class="topbar-actions">
+        <a class="ghost-btn" href="{{ url_for('home') }}">Back to Dashboard</a>
+        <form action="{{ url_for('logout') }}" method="post">
+          <button class="ghost-btn" type="submit">Log Out</button>
+        </form>
+      </div>
     </header>
 
     <main class="layout transactions-layout">

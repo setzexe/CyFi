@@ -14,33 +14,58 @@
   --border: rgba(94, 154, 196, 0.38);
   --accent-soft: rgba(41, 171, 226, 0.16);
   --shadow: rgba(23, 83, 130, 0.24);
-  
-  /* You can replace this URL with a Frutiger Aero Aurora Wallpaper */
-  --hero-url: none;
-  --hero-opacity: 1.0;
+  --hero-url: url("/static/images/aero-bg.png");
 }
 
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
 
 * { box-sizing: border-box; }
 
+html {
+  min-height: 100%;
+}
+
 body {
   margin: 0;
   color: var(--ink);
   font-family: "Nunito", "Segoe UI", "Frutiger", "Verdana", sans-serif;
-  background: linear-gradient(135deg, var(--bg-sky), var(--bg-grass));
   min-height: 100vh;
+  background:
+    linear-gradient(135deg, rgba(235, 255, 247, 0.18), rgba(88, 181, 255, 0.16), rgba(123, 219, 69, 0.12)),
+    var(--hero-url),
+    linear-gradient(135deg, var(--bg-sky), var(--bg-grass));
+  background-size: cover, cover, cover;
+  background-position: center center, center center, center center;
+  background-attachment: fixed, fixed, fixed;
+  overflow-x: hidden;
 }
 
 body::before {
   content: "";
   position: fixed;
   inset: 0;
-  background-image: var(--hero-url);
-  background-size: cover;
-  background-position: center;
-  opacity: 0.6;
-  z-index: -1;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(circle at 12% 82%, rgba(255,255,255,0.28) 0 18px, transparent 19px),
+    radial-gradient(circle at 18% 72%, rgba(255,255,255,0.18) 0 9px, transparent 10px),
+    radial-gradient(circle at 88% 20%, rgba(255,255,255,0.22) 0 24px, transparent 25px),
+    linear-gradient(to bottom, rgba(255,255,255,0.08), rgba(255,255,255,0));
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 26vh;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse at 15% 100%, rgba(42, 151, 54, 0.22), transparent 42%),
+    radial-gradient(ellipse at 85% 100%, rgba(80, 199, 79, 0.18), transparent 44%),
+    linear-gradient(to top, rgba(75, 178, 58, 0.18), transparent);
 }
 
 /* Keep main app content above the decorative layer */

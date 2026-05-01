@@ -6,9 +6,11 @@ from app import db
 
 class Account(db.Model):
     __tablename__ = "accounts"
+    __table_args__ = (db.UniqueConstraint("user_id", "name", name="uq_accounts_user_id_name"),)
 
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(80), nullable=False, unique=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+    name = db.Column(db.String(80), nullable=False)
     account_type = db.Column(db.String(30), nullable=False)
     starting_balance = db.Column(db.Numeric(12, 2), nullable=False, default=Decimal("0.00"))
     current_balance = db.Column(db.Numeric(12, 2), nullable=False, default=Decimal("0.00"))
@@ -17,6 +19,8 @@ class Account(db.Model):
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
+
+    user = db.relationship("User", back_populates="accounts")
 
     transactions = db.relationship(
         "Transaction",
@@ -35,6 +39,7 @@ class AccountHistoryEvent(db.Model):
     __tablename__ = "account_history_events"
 
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
     action = db.Column(db.String(20), nullable=False)
     account_name = db.Column(db.String(80), nullable=False)
     account_balance = db.Column(db.Numeric(12, 2), nullable=False, default=Decimal("0.00"))
@@ -45,6 +50,8 @@ class AccountHistoryEvent(db.Model):
         index=True,
         default=lambda: datetime.now(timezone.utc),
     )
+
+    user = db.relationship("User", back_populates="account_history_events")
 
 
 class Transaction(db.Model):
@@ -89,3 +96,27 @@ class RecurringBill(db.Model):
     )
 
     account = db.relationship("Account", back_populates="recurring_bills")
+
+
+class User(db.Model):
+    __tablename__ = "users"
+
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), nullable=False, unique=True, index=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+    accounts = db.relationship(
+        "Account",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    account_history_events = db.relationship(
+        "AccountHistoryEvent",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )

@@ -3,12 +3,15 @@ import calendar
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
-from flask import Flask, abort, jsonify, render_template, request
+from functools import wraps
+
+from flask import Flask, abort, g, jsonify, redirect, render_template, request, session, url_for
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy import inspect, text
 from dotenv import load_dotenv
+from werkzeug.security import check_password_hash, generate_password_hash
 
 load_dotenv()
 
@@ -70,6 +73,12 @@ def _serialize_datetime(value: datetime | None) -> str | None:
     return value.isoformat()
 
 
+def _safe_next_url(value: str | None) -> str | None:
+    if value and value.startswith("/") and not value.startswith("//"):
+        return value
+    return None
+
+
 def _safe_day(year: int, month: int, due_day: int) -> int:
     max_day = calendar.monthrange(year, month)[1]
     return max(1, min(due_day, max_day))
@@ -103,11 +112,41 @@ def create_app(test_config: dict | None = None) -> Flask:
     migrate.init_app(app, db)
 
     # Register model metadata for migrations.
-    from models import Account, AccountHistoryEvent, RecurringBill, Transaction  # noqa: F401
+    from models import Account, AccountHistoryEvent, RecurringBill, Transaction, User  # noqa: F401
+
+    def normalize_username(value: str) -> str:
+        return value.strip().lower()
+
+    def load_current_user():
+        user_id = session.get("user_id")
+        if user_id is None:
+            return None
+        return db.session.get(User, user_id)
+
+    @app.before_request
+    def attach_current_user():
+        g.user = load_current_user()
+
+    @app.context_processor
+    def inject_current_user():
+        return {"current_user": g.get("user")}
+
+    def login_required(view):
+        @wraps(view)
+        def wrapped_view(*args, **kwargs):
+            if g.user is not None:
+                return view(*args, **kwargs)
+
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Login required"}), 401
+
+            return redirect(url_for("login_page", next=request.path))
+
+        return wrapped_view
 
     def can_record_account_events() -> bool:
         try:
-            return inspect(db.engine).has_table("account_history_events")
+            return inspect(db.session.connection()).has_table("account_history_events")
         except SQLAlchemyError:
             return False
 
@@ -117,6 +156,7 @@ def create_app(test_config: dict | None = None) -> Flask:
 
         db.session.add(
             AccountHistoryEvent(
+                user_id=g.user.id if g.get("user") is not None else None,
                 action=action,
                 account_name=account_name,
                 account_balance=account_balance,
@@ -124,17 +164,94 @@ def create_app(test_config: dict | None = None) -> Flask:
             )
         )
 
+    def claim_legacy_data_for_first_user(user: User):
+        if User.query.count() != 1:
+            return
+
+        Account.query.filter_by(user_id=None).update({"user_id": user.id})
+        if can_record_account_events():
+            AccountHistoryEvent.query.filter_by(user_id=None).update({"user_id": user.id})
+
+    @app.route("/signup", methods=["GET", "POST"])
+    def signup_page():
+        if g.user is not None:
+            return redirect(url_for("home"))
+
+        error = ""
+        if request.method == "POST":
+            username = normalize_username(request.form.get("username", ""))
+            password = request.form.get("password", "")
+            confirm_password = request.form.get("confirm_password", "")
+
+            if not username:
+                error = "Username is required."
+            elif len(username) < 3:
+                error = "Username must be at least 3 characters."
+            elif len(username) > 30:
+                error = "Username must be 30 characters or fewer."
+            elif not username.replace("_", "").replace("-", "").isalnum():
+                error = "Username can only use letters, numbers, dashes, and underscores."
+            elif len(password) < 8:
+                error = "Password must be at least 8 characters."
+            elif password != confirm_password:
+                error = "Passwords must match."
+            else:
+                user = User(username=username, password_hash=generate_password_hash(password))
+                db.session.add(user)
+                try:
+                    db.session.flush()
+                    user_id = user.id
+                    claim_legacy_data_for_first_user(user)
+                    db.session.commit()
+                except IntegrityError:
+                    db.session.rollback()
+                    error = "That username is already taken."
+                else:
+                    session.clear()
+                    session["user_id"] = user_id
+                    return redirect(url_for("home"))
+
+        return render_template("signup.html", error=error)
+
+    @app.route("/login", methods=["GET", "POST"])
+    def login_page():
+        if g.user is not None:
+            return redirect(url_for("home"))
+
+        error = ""
+        if request.method == "POST":
+            username = normalize_username(request.form.get("username", ""))
+            password = request.form.get("password", "")
+            user = User.query.filter_by(username=username).first()
+
+            if user is None or not check_password_hash(user.password_hash, password):
+                error = "Username or password is incorrect."
+            else:
+                session.clear()
+                session["user_id"] = user.id
+                return redirect(_safe_next_url(request.args.get("next")) or url_for("home"))
+
+        return render_template("login.html", error=error)
+
+    @app.post("/logout")
+    def logout():
+        session.clear()
+        return redirect(url_for("login_page"))
+
     @app.get("/")
+    @login_required
     def home():
         return render_template("dashboard.html")
 
     @app.get("/accounts/manage")
+    @login_required
     def manage_accounts_page():
         return render_template("accounts_manage.html")
 
     @app.get("/accounts/<int:account_id>/transactions")
+    @login_required
     def account_transactions_page(account_id: int):
-        account = db.session.get(Account, account_id)
+        account = Account.query.filter_by(id=account_id, user_id=g.user.id).first()
         if account is None:
             abort(404)
 
@@ -146,6 +263,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         )
 
     @app.get("/transactions")
+    @login_required
     def all_transactions_page():
         return render_template("transactions.html")
 
@@ -158,6 +276,7 @@ def create_app(test_config: dict | None = None) -> Flask:
             return jsonify({"database": "error", "detail": str(exc)}), 500
 
     @app.post("/api/transactions")
+    @login_required
     def add_transaction():
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
@@ -173,7 +292,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         except (TypeError, ValueError):
             return jsonify({"error": "account_id must be an integer"}), 400
 
-        account = db.session.get(Account, account_id)
+        account = Account.query.filter_by(id=account_id, user_id=g.user.id).first()
         if account is None:
             return jsonify({"error": "Account not found"}), 404
 
@@ -280,6 +399,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         )
 
     @app.get("/api/transactions/recent")
+    @login_required
     def list_recent_transactions():
         limit = request.args.get("limit", default=20, type=int)
         if limit is None or limit < 1:
@@ -287,7 +407,9 @@ def create_app(test_config: dict | None = None) -> Flask:
         limit = min(limit, 100)
 
         items = (
-            Transaction.query.order_by(Transaction.occurred_at.desc(), Transaction.id.desc())
+            Transaction.query.join(Account)
+            .filter(Account.user_id == g.user.id)
+            .order_by(Transaction.occurred_at.desc(), Transaction.id.desc())
             .limit(limit)
             .all()
         )
@@ -312,8 +434,14 @@ def create_app(test_config: dict | None = None) -> Flask:
         )
 
     @app.get("/api/transactions")
+    @login_required
     def list_all_transactions():
-        items = Transaction.query.order_by(Transaction.occurred_at.desc(), Transaction.id.desc()).all()
+        items = (
+            Transaction.query.join(Account)
+            .filter(Account.user_id == g.user.id)
+            .order_by(Transaction.occurred_at.desc(), Transaction.id.desc())
+            .all()
+        )
 
         return jsonify(
             {
@@ -335,8 +463,9 @@ def create_app(test_config: dict | None = None) -> Flask:
         )
 
     @app.get("/api/accounts/<int:account_id>/transactions")
+    @login_required
     def list_account_transactions(account_id: int):
-        account = db.session.get(Account, account_id)
+        account = Account.query.filter_by(id=account_id, user_id=g.user.id).first()
         if account is None:
             return jsonify({"error": "Account not found"}), 404
 
@@ -370,8 +499,9 @@ def create_app(test_config: dict | None = None) -> Flask:
         )
 
     @app.get("/api/accounts/summary")
+    @login_required
     def account_summaries():
-        accounts = Account.query.order_by(Account.name.asc()).all()
+        accounts = Account.query.filter_by(user_id=g.user.id).order_by(Account.name.asc()).all()
         total_balance = sum((account.current_balance or Decimal("0.00") for account in accounts), Decimal("0.00"))
 
         return jsonify(
@@ -391,6 +521,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         )
 
     @app.get("/api/accounts/history")
+    @login_required
     def account_history():
         limit = request.args.get("limit", default=50, type=int)
         if limit is None or limit < 1:
@@ -399,7 +530,8 @@ def create_app(test_config: dict | None = None) -> Flask:
 
         try:
             entries = (
-                AccountHistoryEvent.query.order_by(AccountHistoryEvent.created_at.desc(), AccountHistoryEvent.id.desc())
+                AccountHistoryEvent.query.filter_by(user_id=g.user.id)
+                .order_by(AccountHistoryEvent.created_at.desc(), AccountHistoryEvent.id.desc())
                 .limit(limit)
                 .all()
             )
@@ -424,6 +556,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         )
 
     @app.post("/api/accounts")
+    @login_required
     def create_account():
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
@@ -443,6 +576,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         note = str(payload.get("note", "")).strip() or None
 
         account = Account(
+            user_id=g.user.id,
             name=name,
             account_type="custom",
             starting_balance=starting_balance,
@@ -474,6 +608,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         )
 
     @app.delete("/api/accounts/<int:account_id>")
+    @login_required
     def delete_account(account_id: int):
         payload = request.get_json(silent=True) or {}
         if not isinstance(payload, dict):
@@ -483,7 +618,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         if confirm is not True:
             return jsonify({"error": "confirm must be true to delete an account"}), 400
 
-        account = db.session.get(Account, account_id)
+        account = Account.query.filter_by(id=account_id, user_id=g.user.id).first()
         if account is None:
             return jsonify({"error": "Account not found"}), 404
 
@@ -498,6 +633,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         return jsonify({"deleted": {"id": account_id, "name": account_name}}), 200
 
     @app.get("/api/bills/upcoming")
+    @login_required
     def upcoming_bills():
         days = request.args.get("days", default=30, type=int)
         if days is None or days < 1:
@@ -507,7 +643,12 @@ def create_app(test_config: dict | None = None) -> Flask:
         today = date.today()
         window_end = today + timedelta(days=days)
 
-        bills = RecurringBill.query.filter_by(active=True).order_by(RecurringBill.due_day.asc()).all()
+        bills = (
+            RecurringBill.query.join(Account)
+            .filter(RecurringBill.active.is_(True), Account.user_id == g.user.id)
+            .order_by(RecurringBill.due_day.asc())
+            .all()
+        )
 
         upcoming = []
         for bill in bills:
@@ -533,9 +674,11 @@ def create_app(test_config: dict | None = None) -> Flask:
         return jsonify({"days": days, "bills": upcoming})
 
     @app.get("/api/bills/recurring")
+    @login_required
     def list_recurring_bills():
         bills = (
-            RecurringBill.query.filter_by(active=True)
+            RecurringBill.query.join(Account)
+            .filter(RecurringBill.active.is_(True), Account.user_id == g.user.id)
             .order_by(RecurringBill.name.asc(), RecurringBill.id.asc())
             .all()
         )
@@ -557,8 +700,13 @@ def create_app(test_config: dict | None = None) -> Flask:
         )
 
     @app.delete("/api/bills/<int:bill_id>")
+    @login_required
     def delete_recurring_bill(bill_id: int):
-        bill = db.session.get(RecurringBill, bill_id)
+        bill = (
+            RecurringBill.query.join(Account)
+            .filter(RecurringBill.id == bill_id, RecurringBill.active.is_(True), Account.user_id == g.user.id)
+            .first()
+        )
         if bill is None or not bill.active:
             return jsonify({"error": "Recurring bill not found"}), 404
 

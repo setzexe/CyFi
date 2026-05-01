@@ -382,6 +382,17 @@ textarea:focus {
   align-self: start;
 }
 
+.topbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.topbar-actions form {
+  margin: 0;
+}
+
 .secondary-btn {
   min-width: 0;
 }
@@ -596,6 +607,10 @@ textarea:focus {
     margin-top: 14px;
     padding: 22px;
     flex-direction: column;
+  }
+
+  .topbar-actions {
+    justify-content: flex-start;
   }
 
   .layout {
