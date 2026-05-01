@@ -14,7 +14,7 @@
   --accent-soft: rgba(41, 171, 226, 0.16);
   --shadow: rgba(23, 83, 130, 0.24);
   --border: rgba(94, 154, 196, 0.38);
-  --hero-url: url("/static/images/aero-bg.jpg");
+  --hero-url: url("/static/images/aero-bg.png");
 }
 
 @import url("https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap");

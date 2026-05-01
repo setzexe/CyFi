@@ -40,6 +40,25 @@ function formatDateTime(value) {
   }).format(parsed);
 }
 
+function normalizeMoneyInput(value, { allowNegative = false } = {}) {
+  const hasLeadingMinus = allowNegative && value.trimStart().startsWith("-");
+  const cleaned = value.replace(/[^\d.]/g, "");
+  const [whole, ...decimalParts] = cleaned.split(".");
+  const decimals = decimalParts.join("").slice(0, 2);
+  const unsigned = decimalParts.length ? `${whole}.${decimals}` : whole;
+  return `${hasLeadingMinus ? "-" : ""}${unsigned}`;
+}
+
+function parseMoney(value, { allowNegative = false } = {}) {
+  const trimmed = value.trim();
+  const pattern = allowNegative ? /^-?\d+(\.\d{1,2})?$/ : /^\d+(\.\d{1,2})?$/;
+  if (!pattern.test(trimmed)) {
+    return Number.NaN;
+  }
+
+  return Number.parseFloat(trimmed);
+}
+
 function clearChildren(node) {
   while (node.firstChild) {
     node.removeChild(node.firstChild);
@@ -145,7 +164,7 @@ function syncActionView() {
 
 function payloadForCreate() {
   const name = ui.newAccountName.value.trim();
-  const startingBalance = Number.parseFloat(ui.newStartingBalance.value);
+  const startingBalance = parseMoney(ui.newStartingBalance.value, { allowNegative: true });
   const note = ui.newAccountNote.value.trim();
 
   if (!name) {
@@ -239,6 +258,12 @@ async function handleSubmit(event) {
 
 ui.actionSelect.addEventListener("change", syncActionView);
 ui.actionForm.addEventListener("submit", handleSubmit);
+ui.newStartingBalance.addEventListener("input", () => {
+  const cleaned = normalizeMoneyInput(ui.newStartingBalance.value, { allowNegative: true });
+  if (ui.newStartingBalance.value !== cleaned) {
+    ui.newStartingBalance.value = cleaned;
+  }
+});
 
 syncActionView();
 loadPageData().catch((error) => {

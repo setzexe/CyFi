@@ -42,6 +42,22 @@ function formatDateTime(value) {
   }).format(parsed);
 }
 
+function normalizeMoneyInput(value) {
+  const cleaned = value.replace(/[^\d.]/g, "");
+  const [whole, ...decimalParts] = cleaned.split(".");
+  const decimals = decimalParts.join("").slice(0, 2);
+  return decimalParts.length ? `${whole}.${decimals}` : whole;
+}
+
+function parseMoney(value) {
+  const trimmed = value.trim();
+  if (!/^\d+(\.\d{1,2})?$/.test(trimmed)) {
+    return Number.NaN;
+  }
+
+  return Number.parseFloat(trimmed);
+}
+
 function clearChildren(node) {
   while (node.firstChild) {
     node.removeChild(node.firstChild);
@@ -202,7 +218,7 @@ function validateForm() {
   const accountId = Number.parseInt(ui.accountId.value, 10);
   const transactionName = ui.transactionName.value.trim();
   const category = ui.category.value.trim();
-  const amount = Number.parseFloat(ui.amount.value);
+  const amount = parseMoney(ui.amount.value);
 
   if (!Number.isInteger(accountId) || accountId < 1) {
     throw new Error("Pick a valid account.");
@@ -298,6 +314,12 @@ async function handleRemoveRecurringBill() {
 ui.refreshBtn.addEventListener("click", loadDashboard);
 ui.form.addEventListener("submit", handleSubmit);
 ui.transactionType.addEventListener("change", syncRecurringFields);
+ui.amount.addEventListener("input", () => {
+  const cleaned = normalizeMoneyInput(ui.amount.value);
+  if (ui.amount.value !== cleaned) {
+    ui.amount.value = cleaned;
+  }
+});
 ui.removeRecurringBillBtn.addEventListener("click", handleRemoveRecurringBill);
 
 syncRecurringFields();

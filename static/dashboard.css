@@ -14,7 +14,7 @@
   --success: #148451;
   --accent-soft: rgba(41, 171, 226, 0.16);
   --shadow: rgba(23, 83, 130, 0.24);
-  --hero-url: url("/static/images/aero-bg.jpg");
+  --hero-url: url("/static/images/aero-bg.png");
 }
 
 * {
@@ -554,6 +554,39 @@ textarea:focus {
   margin-top: 12px;
 }
 
+.transactions-layout {
+  grid-template-areas: none;
+  align-items: start;
+}
+
+.transaction-list-card {
+  min-height: 0;
+}
+
+.scroll-stack {
+  max-height: 768px;
+  padding-right: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(18, 117, 215, 0.62) rgba(255,255,255,0.28);
+}
+
+.scroll-stack::-webkit-scrollbar {
+  width: 10px;
+}
+
+.scroll-stack::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(255,255,255,0.28);
+}
+
+.scroll-stack::-webkit-scrollbar-thumb {
+  border: 2px solid rgba(255,255,255,0.46);
+  border-radius: 999px;
+  background: rgba(18, 117, 215, 0.62);
+}
+
 @media (max-width: 900px) {
   body {
     padding: 0 12px;
@@ -573,6 +606,14 @@ textarea:focus {
       "recent"
       "bills";
     padding: 16px;
+  }
+
+  .transactions-layout {
+    grid-template-areas: none;
+  }
+
+  .scroll-stack {
+    max-height: 70vh;
   }
 
   .form-card form {

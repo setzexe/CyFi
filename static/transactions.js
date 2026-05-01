@@ -1,4 +1,5 @@
 const ui = {
+  depositsList: document.getElementById("depositsList"),
   transactionsList: document.getElementById("transactionsList"),
 };
 
@@ -65,20 +66,41 @@ function listItem(title, value, detail) {
 }
 
 function renderTransactions(payload) {
+  clearChildren(ui.depositsList);
   clearChildren(ui.transactionsList);
   const transactions = payload.transactions || [];
+  const deposits = transactions.filter((tx) => tx.transaction_type === "deposit");
+  const outgoing = transactions.filter((tx) => tx.transaction_type !== "deposit");
 
   if (!transactions.length) {
-    const empty = document.createElement("li");
-    empty.textContent = "No transactions found yet.";
-    ui.transactionsList.appendChild(empty);
+    ui.depositsList.appendChild(emptyItem("No deposits found yet."));
+    ui.transactionsList.appendChild(emptyItem("No transactions found yet."));
     return;
   }
 
-  for (const tx of transactions) {
+  if (!deposits.length) {
+    ui.depositsList.appendChild(emptyItem("No deposits found yet."));
+  }
+
+  if (!outgoing.length) {
+    ui.transactionsList.appendChild(emptyItem("No transactions found yet."));
+  }
+
+  for (const tx of deposits) {
+    const detail = `${tx.account_name} · ${formatDateTime(tx.occurred_at)}`;
+    ui.depositsList.appendChild(listItem(tx.transaction_name, formatMoney(tx.amount), detail));
+  }
+
+  for (const tx of outgoing) {
     const detail = `${tx.account_name} · ${formatDateTime(tx.occurred_at)}`;
     ui.transactionsList.appendChild(listItem(tx.transaction_name, formatMoney(tx.amount), detail));
   }
+}
+
+function emptyItem(message) {
+  const empty = document.createElement("li");
+  empty.textContent = message;
+  return empty;
 }
 
 async function loadTransactions() {
@@ -87,8 +109,8 @@ async function loadTransactions() {
 }
 
 loadTransactions().catch((error) => {
+  clearChildren(ui.depositsList);
   clearChildren(ui.transactionsList);
-  const failed = document.createElement("li");
-  failed.textContent = error.message;
-  ui.transactionsList.appendChild(failed);
+  ui.depositsList.appendChild(emptyItem(error.message));
+  ui.transactionsList.appendChild(emptyItem(error.message));
 });

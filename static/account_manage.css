@@ -22,7 +22,7 @@
   --success: #148451;
   --shadow: rgba(23, 83, 130, 0.24);
   --glass-blur: 18px;
-  --hero-url: url("/static/images/aero-bg.jpg");
+  --hero-url: url("/static/images/aero-bg.png");
 }
 
 * {
@@ -167,8 +167,8 @@ h1 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-areas:
-    "form accounts"
-    "bills recent";
+    "summary action"
+    "history history";
   gap: 20px;
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.28), rgba(210, 244, 255, 0.18));
@@ -215,20 +215,16 @@ h1 {
   z-index: 1;
 }
 
-.form-card {
-  grid-area: form;
+.summary-card {
+  grid-area: summary;
 }
 
-.account-card {
-  grid-area: accounts;
+.action-card {
+  grid-area: action;
 }
 
-.recent-card {
-  grid-area: recent;
-}
-
-.bills-card {
-  grid-area: bills;
+.history-card {
+  grid-area: history;
 }
 
 h2 {
@@ -290,25 +286,30 @@ textarea:focus {
     0 0 22px rgba(31, 159, 242, 0.18);
 }
 
-.form-card form {
+.action-card form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   column-gap: 16px;
   align-items: end;
 }
 
-.form-card h2,
-.form-card .hint,
-.form-card .message {
+.action-card h2,
+.action-card .hint,
+.action-card .message {
   grid-column: 1 / -1;
 }
 
-.form-card label:nth-of-type(1),
-.form-card label:nth-of-type(1) + select,
-.form-card label:nth-of-type(3),
-.form-card label:nth-of-type(3) + input,
-.form-card label:nth-of-type(5),
-.form-card label:nth-of-type(5) + input {
+#addFields,
+#deleteFields {
+  grid-column: 1 / -1;
+}
+
+.action-card label:nth-of-type(1),
+.action-card label:nth-of-type(1) + select,
+.action-card label:nth-of-type(3),
+.action-card label:nth-of-type(3) + input,
+.action-card label:nth-of-type(5),
+.action-card label:nth-of-type(5) + input {
   grid-column: 1 / -1;
 }
 
@@ -398,6 +399,37 @@ textarea:focus {
   gap: 12px;
 }
 
+.scroll-stack {
+  padding-right: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(20, 142, 232, 0.62) rgba(255, 255, 255, 0.28);
+}
+
+.account-summary-stack {
+  max-height: 344px;
+}
+
+.account-history-stack {
+  max-height: 418px;
+}
+
+.scroll-stack::-webkit-scrollbar {
+  width: 10px;
+}
+
+.scroll-stack::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.scroll-stack::-webkit-scrollbar-thumb {
+  border: 2px solid rgba(255, 255, 255, 0.46);
+  border-radius: 999px;
+  background: rgba(20, 142, 232, 0.62);
+}
+
 .stack li {
   padding: 14px 18px;
   border: 1px solid rgba(255, 255, 255, 0.7);
@@ -480,23 +512,27 @@ textarea:focus {
   .layout {
     grid-template-columns: 1fr;
     grid-template-areas:
-      "form"
-      "accounts"
-      "recent"
-      "bills";
+      "summary"
+      "action"
+      "history";
     padding: 16px;
   }
 
-  .form-card form {
+  .action-card form {
     grid-template-columns: 1fr;
   }
 
-  .form-card label,
-  .form-card input,
-  .form-card select,
-  .form-card textarea,
+  .action-card label,
+  .action-card input,
+  .action-card select,
+  .action-card textarea,
   .primary-btn {
     grid-column: 1 / -1;
+  }
+
+  .account-summary-stack,
+  .account-history-stack {
+    max-height: 70vh;
   }
 }
 
