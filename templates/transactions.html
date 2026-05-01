@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>All Transactions | CyFi</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='transactions.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}" />
   </head>
   <body>
     <header class="topbar">
@@ -16,10 +16,15 @@
       <a class="ghost-btn" href="{{ url_for('home') }}">Back to Dashboard</a>
     </header>
 
-    <main class="layout">
-      <section class="card">
-        <h2>Transaction History</h2>
-        <ul id="transactionsList" class="stack"></ul>
+    <main class="layout transactions-layout">
+      <section class="card transaction-list-card">
+        <h2>Recent Deposits</h2>
+        <ul id="depositsList" class="stack scroll-stack"></ul>
+      </section>
+
+      <section class="card transaction-list-card">
+        <h2>Recent Transactions</h2>
+        <ul id="transactionsList" class="stack scroll-stack"></ul>
       </section>
     </main>
 
