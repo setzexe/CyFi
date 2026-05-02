@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="csrf-token" content="{{ csrf_token() }}" />
+    <title>Sign Up | CyFi</title>
+    <link rel="preload" as="image" href="{{ url_for('static', filename='images/aero-bg.png') }}" fetchpriority="high" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='auth.css') }}" />
+  </head>
+  <body>
+    <main class="auth-shell auth-shell--split">
+      <section class="auth-card signup-card">
+        <p class="eyebrow">CYFI</p>
+        <h1>Create Account</h1>
+        <p class="subtitle">Start with a private workspace for your accounts and transactions.</p>
+
+        <form method="post" novalidate>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+          <label for="username">Username</label>
+          <input id="username" name="username" type="text" autocomplete="username" maxlength="30" required />
+
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="new-password" required />
+
+          <label for="confirm_password">Confirm Password</label>
+          <input id="confirm_password" name="confirm_password" type="password" autocomplete="new-password" required />
+
+          <button class="primary-btn" type="submit">Sign Up</button>
+        </form>
+
+        <p class="security-note">
+          Passwords are hashed, but this is a low-stakes manual tracker. Do not reuse an important password.
+        </p>
+
+        {% if error %}
+          <p class="message error" role="alert">{{ error }}</p>
+        {% else %}
+          <p class="message" aria-hidden="true"></p>
+        {% endif %}
+
+        <p class="auth-switch">Already have an account? <a href="{{ url_for('login_page') }}">Log in</a></p>
+      </section>
+
+      <section class="auth-card info-card" aria-labelledby="infoTitle">
+        <div class="info-bubble" aria-label="About CyFi">
+          <p class="eyebrow">CYFI</p>
+          <h2 id="infoTitle">What is CyFi?</h2>
+
+          <p class="info-section">
+            <strong>Purpose</strong>
+            <span>CyFi is a personal finance tracker built for simplicity and security. It lets you manually manage accounts, transactions, and recurring bills from one unified dashboard.</span>
+          </p>
+
+          <p class="info-section">
+            <strong>Why was CyFi Built</strong>
+            <span>CyFi was built due to many modern systems being complex and utilizing data that is not needed. Rather than connecting to a bank, you are in control of your own data. No real data is at risk.</span>
+          </p>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

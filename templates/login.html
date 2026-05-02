@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="csrf-token" content="{{ csrf_token() }}" />
+    <title>Log In | CyFi</title>
+    <link rel="preload" as="image" href="{{ url_for('static', filename='images/aero-bg.png') }}" fetchpriority="high" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='auth.css') }}" />
+  </head>
+  <body>
+    <main class="auth-shell auth-shell--split">
+      <section class="auth-card login-card">
+        <p class="eyebrow">CYFI</p>
+        <h1>Welcome! ^^</h1>
+        <p class="subtitle">Sign in to the CyFi manual finance tracker.</p>
+
+        <form method="post" novalidate>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+          <label for="username">Username</label>
+          <input id="username" name="username" type="text" autocomplete="username" maxlength="30" required />
+
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required />
+
+          <button class="primary-btn" type="submit">Log In</button>
+        </form>
+
+        {% if error %}
+          <p class="message error" role="alert">{{ error }}</p>
+        {% else %}
+          <p class="message" aria-hidden="true"></p>
+        {% endif %}
+
+        <p class="auth-switch">New to CyFi? <a href="{{ url_for('signup_page') }}">Create an account</a></p>
+      </section>
+
+      <section class="auth-card updates-card" aria-labelledby="updatesTitle">
+        <p class="eyebrow">CYBERSEVERANCE</p>
+        <h2 id="updatesTitle">News / Updates</h2>
+        <p class="subtitle">Project notes and brand updates will live here.</p>
+
+        <div class="updates-bubble" aria-label="Latest update">
+          <p class="updates-label">CyFi in development</p>
+          <p class="updates-body">CyFi coming soon...</p>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

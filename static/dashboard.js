@@ -18,6 +18,12 @@ const ui = {
   removeRecurringBillBtn: document.getElementById("removeRecurringBillBtn"),
 };
 
+const limits = {
+  transactionName: 50,
+  category: 25,
+  note: 255,
+};
+
 function formatMoney(value) {
   const parsed = Number.parseFloat(String(value ?? "0"));
   return new Intl.NumberFormat("en-US", {
@@ -62,6 +68,11 @@ function clearChildren(node) {
   while (node.firstChild) {
     node.removeChild(node.firstChild);
   }
+}
+
+function csrfHeaders() {
+  const token = document.querySelector('meta[name="csrf-token"]')?.content || "";
+  return token ? { "X-CSRF-Token": token } : {};
 }
 
 function showMessage(text, type = "") {
@@ -226,8 +237,17 @@ function validateForm() {
   if (!transactionName) {
     throw new Error("Transaction name is required.");
   }
+  if (transactionName.length > limits.transactionName) {
+    throw new Error(`Transaction name must be ${limits.transactionName} characters or fewer.`);
+  }
   if (!category) {
     throw new Error("Category is required.");
+  }
+  if (category.length > limits.category) {
+    throw new Error(`Category must be ${limits.category} characters or fewer.`);
+  }
+  if (ui.note.value.trim().length > limits.note) {
+    throw new Error(`Note must be ${limits.note} characters or fewer.`);
   }
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error("Amount must be greater than 0.");
@@ -274,7 +294,7 @@ async function handleSubmit(event) {
   try {
     await fetch("/api/transactions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...csrfHeaders() },
       body: JSON.stringify(payload),
     }).then(toJson);
 
@@ -302,6 +322,7 @@ async function handleRemoveRecurringBill() {
   try {
     await fetch(`/api/bills/${billId}`, {
       method: "DELETE",
+      headers: csrfHeaders(),
     }).then(toJson);
 
     showMessage("Recurring bill removed.", "success");

@@ -3,7 +3,26 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="csrf-token" content="{{ csrf_token() }}" />
     <title>CyFi Dashboard</title>
+    <link rel="preload" as="image" href="{{ url_for('static', filename='images/aero-bg.png') }}" fetchpriority="high" />
+    <style>
+      html {
+        min-height: 100%;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        background-color: #8fcde8;
+        background-image:
+          linear-gradient(135deg, rgba(235, 255, 247, 0.18), rgba(88, 181, 255, 0.16), rgba(123, 219, 69, 0.12)),
+          url("{{ url_for('static', filename='images/aero-bg.png') }}");
+        background-size: cover, cover;
+        background-position: center center, center center;
+        background-attachment: fixed, fixed;
+      }
+    </style>
     <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}" />
   </head>
   <body>
@@ -13,7 +32,13 @@
         <h1>Welcome back Σ(￣。￣ﾉ)</h1>
         <p class="subtitle">Track balances, post expenses or deposits, and review your latest activity.</p>
       </div>
-      <button id="refreshBtn" class="ghost-btn" type="button">Refresh</button>
+      <div class="topbar-actions">
+        <button id="refreshBtn" class="ghost-btn" type="button">Refresh</button>
+        <form action="{{ url_for('logout') }}" method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <button class="ghost-btn" type="submit">Log Out</button>
+        </form>
+      </div>
     </header>
 
     <main class="layout">
@@ -38,16 +63,16 @@
           </div>
 
           <label for="transactionName">Name</label>
-          <input id="transactionName" type="text" placeholder="Coffee, Payroll, Gas" required />
+          <input id="transactionName" type="text" maxlength="50" placeholder="Coffee, Payroll, Gas" required />
 
           <label for="amount">Amount</label>
           <input id="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0.00" required />
 
           <label for="category">Category</label>
-          <input id="category" type="text" placeholder="Food, Bills, Income" required />
+          <input id="category" type="text" maxlength="25" placeholder="Food, Bills, Income" required />
 
           <label for="note">Note (optional)</label>
-          <input id="note" type="text" placeholder="Optional details" />
+          <input id="note" type="text" maxlength="255" placeholder="Optional details" />
 
           <button class="primary-btn" type="submit">Save Transaction</button>
         </form>

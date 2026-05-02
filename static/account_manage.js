@@ -16,6 +16,11 @@ const ui = {
   deleteConfirm: document.getElementById("deleteConfirm"),
 };
 
+const limits = {
+  accountName: 50,
+  note: 255,
+};
+
 function formatMoney(value) {
   const parsed = Number.parseFloat(String(value ?? "0"));
   return new Intl.NumberFormat("en-US", {
@@ -63,6 +68,11 @@ function clearChildren(node) {
   while (node.firstChild) {
     node.removeChild(node.firstChild);
   }
+}
+
+function csrfHeaders() {
+  const token = document.querySelector('meta[name="csrf-token"]')?.content || "";
+  return token ? { "X-CSRF-Token": token } : {};
 }
 
 async function toJson(response) {
@@ -170,6 +180,12 @@ function payloadForCreate() {
   if (!name) {
     throw new Error("Account name is required.");
   }
+  if (name.length > limits.accountName) {
+    throw new Error(`Account name must be ${limits.accountName} characters or fewer.`);
+  }
+  if (note.length > limits.note) {
+    throw new Error(`Note must be ${limits.note} characters or fewer.`);
+  }
   if (!Number.isFinite(startingBalance)) {
     throw new Error("Starting balance must be a valid number.");
   }
@@ -190,6 +206,9 @@ function payloadForDelete() {
   }
   if (!ui.deleteConfirm.checked) {
     throw new Error("Confirm deletion before continuing.");
+  }
+  if (reason.length > limits.note) {
+    throw new Error(`Reason must be ${limits.note} characters or fewer.`);
   }
 
   return {
@@ -229,7 +248,7 @@ async function handleSubmit(event) {
       const body = payloadForCreate();
       await fetch("/api/accounts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...csrfHeaders() },
         body: JSON.stringify(body),
       }).then(toJson);
 
@@ -241,7 +260,7 @@ async function handleSubmit(event) {
       const { accountId, body } = payloadForDelete();
       await fetch(`/api/accounts/${accountId}`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...csrfHeaders() },
         body: JSON.stringify(body),
       }).then(toJson);
 
