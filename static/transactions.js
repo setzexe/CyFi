@@ -95,6 +95,30 @@ function renderTransactions(payload) {
     const detail = `${tx.account_name} · ${formatDateTime(tx.occurred_at)}`;
     ui.transactionsList.appendChild(listItem(tx.transaction_name, formatMoney(tx.amount), detail));
   }
+
+  capListToVisibleItems(ui.depositsList, 8);
+  capListToVisibleItems(ui.transactionsList, 8);
+}
+
+function capListToVisibleItems(listNode, visibleCount = 8) {
+  if (!listNode) {
+    return;
+  }
+
+  const items = Array.from(listNode.children);
+  listNode.style.maxHeight = "none";
+
+  if (items.length <= visibleCount) {
+    return;
+  }
+
+  const styles = window.getComputedStyle(listNode);
+  const gap = Number.parseFloat(styles.rowGap || styles.gap || "0") || 0;
+  const visibleItems = items.slice(0, visibleCount);
+  const contentHeight = visibleItems.reduce((sum, item) => sum + item.getBoundingClientRect().height, 0);
+  const totalHeight = Math.ceil(contentHeight + gap * Math.max(visibleCount - 1, 0));
+
+  listNode.style.maxHeight = `${totalHeight}px`;
 }
 
 function emptyItem(message) {

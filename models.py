@@ -10,7 +10,7 @@ class Account(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
-    name = db.Column(db.String(80), nullable=False)
+    name = db.Column(db.String(50), nullable=False)
     account_type = db.Column(db.String(30), nullable=False)
     starting_balance = db.Column(db.Numeric(12, 2), nullable=False, default=Decimal("0.00"))
     current_balance = db.Column(db.Numeric(12, 2), nullable=False, default=Decimal("0.00"))
@@ -41,7 +41,7 @@ class AccountHistoryEvent(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
     action = db.Column(db.String(20), nullable=False)
-    account_name = db.Column(db.String(80), nullable=False)
+    account_name = db.Column(db.String(50), nullable=False)
     account_balance = db.Column(db.Numeric(12, 2), nullable=False, default=Decimal("0.00"))
     note = db.Column(db.String(255), nullable=True)
     created_at = db.Column(
@@ -59,9 +59,9 @@ class Transaction(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=False, index=True)
-    transaction_name = db.Column(db.String(120), nullable=False, server_default="Transaction")
+    transaction_name = db.Column(db.String(50), nullable=False, server_default="Transaction")
     amount = db.Column(db.Numeric(12, 2), nullable=False)
-    category = db.Column(db.String(60), nullable=False)
+    category = db.Column(db.String(25), nullable=False)
     transaction_type = db.Column(db.String(10), nullable=False)
     note = db.Column(db.String(255), nullable=True)
     occurred_at = db.Column(
@@ -83,9 +83,9 @@ class RecurringBill(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     account_id = db.Column(db.Integer, db.ForeignKey("accounts.id"), nullable=True, index=True)
-    name = db.Column(db.String(120), nullable=False)
+    name = db.Column(db.String(50), nullable=False)
     amount = db.Column(db.Numeric(12, 2), nullable=False)
-    category = db.Column(db.String(60), nullable=False)
+    category = db.Column(db.String(25), nullable=False)
     due_day = db.Column(db.Integer, nullable=False)
     frequency = db.Column(db.String(20), nullable=False, default="monthly")
     active = db.Column(db.Boolean, nullable=False, default=True)
@@ -102,7 +102,7 @@ class User(db.Model):
     __tablename__ = "users"
 
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), nullable=False, unique=True, index=True)
+    username = db.Column(db.String(30), nullable=False, unique=True, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     created_at = db.Column(
         db.DateTime(timezone=True),

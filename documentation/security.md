@@ -22,6 +22,8 @@ Main risks include:
 - Malicious injection
 - Requests from outside sources
 - Cookie / session failure
+- Oversized input payloads
+- Internal error detail leaks
 
 ## Security Implementation
 
@@ -145,6 +147,38 @@ This prevents open redirects where an attacker could redirect users to malicious
 
 ___
 
+**Input length validation** limits how much text users can submit into fields within forms. Besides helping with readability, this also prevents oversized data payloads and ensures that even SQL columns can support the inputs.
+
+- Transaction name: 50 characters
+- Category: 25 characters
+- Account name: 50 characters
+- Notes / reasons: 255 characters
+- Username: 30 characters
+
+*Code Implementation:*
+
+- Standard limits are defined near the top of the app with constants like [`MAX_TRANSACTION_NAME_LENGTH = 50`, `MAX_CATEGORY_LENGTH = 25`, and `MAX_NOTE_LENGTH = 255`](../app.py#L24).
+- Shared length validation is handled by [`def _validate_max_length(field_name: str, value: str, max_length: int) -> str | None:`](../app.py#L87).
+- Signup username length is checked with [`len(username) > MAX_USERNAME_LENGTH`](../app.py#L279).
+- Transaction name, category, and note are checked before creating a transaction in [`def add_transaction():`](../app.py#L378).
+- Account name and account note are checked before creating an account in [`def create_account():`](../app.py#L658).
+- Account deletion reason is checked before deleting an account in [`def delete_account(account_id: int):`](../app.py#L708).
+- HTML inputs also include `maxlength` attributes, such as [`maxlength="50"` for transaction name](../templates/dashboard.html#L66), [`maxlength="25"` for category](../templates/dashboard.html#L72), and [`maxlength="255"` for notes](../templates/dashboard.html#L75).
+- JavaScript validation mirrors the server limits in [`dashboard.js`](../static/dashboard.js#L16) and [`account_manage.js`](../static/account_manage.js#L23), but the server-side checks are the real security boundary.
+
+___
+
+**Health check error handling** keeps database internals private. `/health/db` is useful for checking if the database is reachable, but users should not see raw exception text from the database driver. Raw errors do not reveal vital info like passwords, but they can expose paths, raw code, or SQL within the code. This can be used by attackers for a greater attack surface.
+
+*Code Implementation:*
+
+- The health route still checks the database with [`db.session.execute(text("SELECT 1"))`](../app.py#L367).
+- On success, it returns [`{"database": "ok"}`](../app.py#L368).
+- On failure, the raw exception is logged server-side with [`app.logger.exception("Database health check failed")`](../app.py#L370).
+- The user only receives [`{"database": "error"}`](../app.py#L371), not the internal error details.
+
+___
+
 **Security headers** are extra browser instructions that reduce common web attacks. They do not replace authentication, authorization, or CSRF protection, but they add another layer of protection.
 
 *Code Implementation:*
@@ -155,3 +189,19 @@ ___
 - [`Referrer-Policy: same-origin`](../app.py#L205) limits how much URL information is sent as referrer data.
 - [`Content-Security-Policy`](../app.py#L206) limits what scripts, styles, images, forms, and frames the browser should allow.
 - The current CSP allows `'unsafe-inline'` for scripts and styles because some templates currently use inline CSS and small inline scripts. This could be tightened later by moving all inline code into static files.
+
+# Manual Security Testing
+
+This involves running through the actual application itself and testing different parts of it. Automated codes are great, but they might not catch every thing. Especially not the unpredicatibility of humans.
+
+- User 1 cannot log in nor access User 2's information
+    - Having username 2 but not password 2 does not allow user 1 to access.
+    - Users have no ways of seeing each other's data.
+
+- Brute Force check: User's enter a timemout and can not enter passwords if they get 5 incorrect password attempts.
+
+- For now, caps default to lowercase when creating usernames. You also can only enter numbers, letters, and specific characters. Standard injection would not be valid here
+
+- Wireshark shows apprioriate headers and HTTP.
+
+- Input Length cannot be submitted or typed if beyond it's limit.

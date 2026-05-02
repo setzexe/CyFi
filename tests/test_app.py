@@ -184,6 +184,20 @@ def test_security_headers_are_added_to_responses():
     assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
 
 
+def test_database_health_check_hides_raw_errors(monkeypatch):
+    client, _ = _build_client_and_app()
+
+    def broken_execute(_statement):
+        raise RuntimeError("raw database details should stay server-side")
+
+    monkeypatch.setattr(db.session, "execute", broken_execute)
+
+    response = client.get("/health/db")
+
+    assert response.status_code == 500
+    assert response.get_json() == {"database": "error"}
+
+
 def test_logged_out_user_cannot_access_private_pages_or_apis():
     client, _ = _build_client_and_app()
     with client.session_transaction() as session:
@@ -536,6 +550,57 @@ def test_bad_input_returns_error():
     assert response.status_code == 400
 
 
+def test_transaction_text_fields_have_length_limits():
+    client, app = _build_client_and_app()
+
+    with app.app_context():
+        account = Account.query.filter_by(name="Checking").first()
+        account_id = account.id
+
+    long_name = client.post(
+        "/api/transactions",
+        headers=_csrf_headers(client),
+        json={
+            "account_id": account_id,
+            "transaction_name": "x" * 51,
+            "amount": "4.50",
+            "category": "Food",
+            "transaction_type": "expense",
+        },
+    )
+    assert long_name.status_code == 400
+    assert long_name.get_json()["error"] == "transaction_name must be 50 characters or fewer"
+
+    long_category = client.post(
+        "/api/transactions",
+        headers=_csrf_headers(client),
+        json={
+            "account_id": account_id,
+            "transaction_name": "Coffee",
+            "amount": "4.50",
+            "category": "x" * 26,
+            "transaction_type": "expense",
+        },
+    )
+    assert long_category.status_code == 400
+    assert long_category.get_json()["error"] == "category must be 25 characters or fewer"
+
+    long_note = client.post(
+        "/api/transactions",
+        headers=_csrf_headers(client),
+        json={
+            "account_id": account_id,
+            "transaction_name": "Coffee",
+            "amount": "4.50",
+            "category": "Food",
+            "transaction_type": "expense",
+            "note": "x" * 256,
+        },
+    )
+    assert long_note.status_code == 400
+    assert long_note.get_json()["error"] == "note must be 255 characters or fewer"
+
+
 def test_transaction_cannot_make_balance_negative():
     client, app = _build_client_and_app()
 
@@ -706,6 +771,45 @@ def test_create_account_adds_history_event():
         assert event.account_name == "Travel"
         assert str(event.account_balance) == "250.00"
         assert event.note == "Created for trips"
+
+
+def test_account_text_fields_have_length_limits():
+    client, app = _build_client_and_app()
+
+    long_name = client.post(
+        "/api/accounts",
+        headers=_csrf_headers(client),
+        json={
+            "name": "x" * 51,
+            "starting_balance": "250.00",
+        },
+    )
+    assert long_name.status_code == 400
+    assert long_name.get_json()["error"] == "name must be 50 characters or fewer"
+
+    long_note = client.post(
+        "/api/accounts",
+        headers=_csrf_headers(client),
+        json={
+            "name": "Travel",
+            "starting_balance": "250.00",
+            "note": "x" * 256,
+        },
+    )
+    assert long_note.status_code == 400
+    assert long_note.get_json()["error"] == "note must be 255 characters or fewer"
+
+    with app.app_context():
+        account = Account.query.filter_by(name="Checking").first()
+        account_id = account.id
+
+    long_reason = client.delete(
+        f"/api/accounts/{account_id}",
+        headers=_csrf_headers(client),
+        json={"confirm": True, "reason": "x" * 256},
+    )
+    assert long_reason.status_code == 400
+    assert long_reason.get_json()["error"] == "reason must be 255 characters or fewer"
 
 
 def test_delete_account_requires_confirmation():

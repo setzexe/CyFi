@@ -16,6 +16,11 @@ const ui = {
   deleteConfirm: document.getElementById("deleteConfirm"),
 };
 
+const limits = {
+  accountName: 50,
+  note: 255,
+};
+
 function formatMoney(value) {
   const parsed = Number.parseFloat(String(value ?? "0"));
   return new Intl.NumberFormat("en-US", {
@@ -175,6 +180,12 @@ function payloadForCreate() {
   if (!name) {
     throw new Error("Account name is required.");
   }
+  if (name.length > limits.accountName) {
+    throw new Error(`Account name must be ${limits.accountName} characters or fewer.`);
+  }
+  if (note.length > limits.note) {
+    throw new Error(`Note must be ${limits.note} characters or fewer.`);
+  }
   if (!Number.isFinite(startingBalance)) {
     throw new Error("Starting balance must be a valid number.");
   }
@@ -195,6 +206,9 @@ function payloadForDelete() {
   }
   if (!ui.deleteConfirm.checked) {
     throw new Error("Confirm deletion before continuing.");
+  }
+  if (reason.length > limits.note) {
+    throw new Error(`Reason must be ${limits.note} characters or fewer.`);
   }
 
   return {

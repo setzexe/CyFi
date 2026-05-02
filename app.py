@@ -21,6 +21,11 @@ db = SQLAlchemy()
 migrate = Migrate()
 
 DEFAULT_SECRET_KEY = "dev-key-change-me"
+MAX_USERNAME_LENGTH = 30
+MAX_ACCOUNT_NAME_LENGTH = 50
+MAX_TRANSACTION_NAME_LENGTH = 50
+MAX_CATEGORY_LENGTH = 25
+MAX_NOTE_LENGTH = 255
 
 
 def _database_url() -> str:
@@ -80,6 +85,12 @@ def _serialize_datetime(value: datetime | None) -> str | None:
 def _safe_next_url(value: str | None) -> str | None:
     if value and value.startswith("/") and not value.startswith("//"):
         return value
+    return None
+
+
+def _validate_max_length(field_name: str, value: str, max_length: int) -> str | None:
+    if len(value) > max_length:
+        return f"{field_name} must be {max_length} characters or fewer"
     return None
 
 
@@ -275,8 +286,8 @@ def create_app(test_config: dict | None = None) -> Flask:
                 error = "Username is required."
             elif len(username) < 3:
                 error = "Username must be at least 3 characters."
-            elif len(username) > 30:
-                error = "Username must be 30 characters or fewer."
+            elif len(username) > MAX_USERNAME_LENGTH:
+                error = f"Username must be {MAX_USERNAME_LENGTH} characters or fewer."
             elif not username.replace("_", "").replace("-", "").isalnum():
                 error = "Username can only use letters, numbers, dashes, and underscores."
             elif len(password) < 8:
@@ -368,8 +379,9 @@ def create_app(test_config: dict | None = None) -> Flask:
         try:
             db.session.execute(text("SELECT 1"))
             return jsonify({"database": "ok"}), 200
-        except Exception as exc:
-            return jsonify({"database": "error", "detail": str(exc)}), 500
+        except Exception:
+            app.logger.exception("Database health check failed")
+            return jsonify({"database": "error"}), 500
 
     @app.post("/api/transactions")
     @login_required
@@ -395,10 +407,21 @@ def create_app(test_config: dict | None = None) -> Flask:
         transaction_name = str(payload["transaction_name"]).strip()
         if not transaction_name:
             return jsonify({"error": "transaction_name cannot be empty"}), 400
+        length_error = _validate_max_length("transaction_name", transaction_name, MAX_TRANSACTION_NAME_LENGTH)
+        if length_error:
+            return jsonify({"error": length_error}), 400
 
         category = str(payload["category"]).strip()
         if not category:
             return jsonify({"error": "category cannot be empty"}), 400
+        length_error = _validate_max_length("category", category, MAX_CATEGORY_LENGTH)
+        if length_error:
+            return jsonify({"error": length_error}), 400
+
+        note = str(payload.get("note", "")).strip()
+        length_error = _validate_max_length("note", note, MAX_NOTE_LENGTH)
+        if length_error:
+            return jsonify({"error": length_error}), 400
 
         try:
             amount = Decimal(str(payload["amount"]))
@@ -433,7 +456,7 @@ def create_app(test_config: dict | None = None) -> Flask:
             amount=amount,
             category=category,
             transaction_type=transaction_type,
-            note=str(payload.get("note", "")).strip() or None,
+            note=note or None,
             occurred_at=occurred_at or datetime.now(timezone.utc),
         )
 
@@ -661,8 +684,9 @@ def create_app(test_config: dict | None = None) -> Flask:
         name = str(payload.get("name", "")).strip()
         if not name:
             return jsonify({"error": "name is required"}), 400
-        if len(name) > 80:
-            return jsonify({"error": "name must be 80 characters or fewer"}), 400
+        length_error = _validate_max_length("name", name, MAX_ACCOUNT_NAME_LENGTH)
+        if length_error:
+            return jsonify({"error": length_error}), 400
 
         try:
             starting_balance = Decimal(str(payload.get("starting_balance", "0")))
@@ -670,6 +694,10 @@ def create_app(test_config: dict | None = None) -> Flask:
             return jsonify({"error": "starting_balance must be numeric"}), 400
 
         note = str(payload.get("note", "")).strip() or None
+        if note:
+            length_error = _validate_max_length("note", note, MAX_NOTE_LENGTH)
+            if length_error:
+                return jsonify({"error": length_error}), 400
 
         account = Account(
             user_id=g.user.id,
@@ -719,6 +747,10 @@ def create_app(test_config: dict | None = None) -> Flask:
             return jsonify({"error": "Account not found"}), 404
 
         reason = str(payload.get("reason", "")).strip() or None
+        if reason:
+            length_error = _validate_max_length("reason", reason, MAX_NOTE_LENGTH)
+            if length_error:
+                return jsonify({"error": length_error}), 400
         account_name = account.name
         account_balance = account.current_balance or Decimal("0.00")
 

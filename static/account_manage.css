@@ -1,8 +1,5 @@
-@import url("https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap");
-
 :root {
-  --bg-sky: #70c1ff;
-  --bg-grass: #a0d85a;
+  --bg-aero-fallback: #8fcde8;
   --accent: #29abe2;
   --accent-2: #0071bc;
   --panel-bg: rgba(255, 255, 255, 0.5);
@@ -30,13 +27,13 @@ body {
   min-height: 100vh;
   color: var(--ink);
   font-family: "Nunito", "Segoe UI", "Frutiger", "Verdana", sans-serif;
-  background:
+  background-color: var(--bg-aero-fallback);
+  background-image:
     linear-gradient(135deg, rgba(235, 255, 247, 0.18), rgba(88, 181, 255, 0.16), rgba(123, 219, 69, 0.12)),
-    var(--hero-url),
-    linear-gradient(135deg, var(--bg-sky), var(--bg-grass));
-  background-size: cover, cover, cover;
-  background-position: center center, center center, center center;
-  background-attachment: fixed, fixed, fixed;
+    var(--hero-url);
+  background-size: cover, cover;
+  background-position: center center, center center;
+  background-attachment: fixed, fixed;
   overflow-x: hidden;
 }
 

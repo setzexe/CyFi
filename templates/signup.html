@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="csrf-token" content="{{ csrf_token() }}" />
     <title>Sign Up | CyFi</title>
+    <link rel="preload" as="image" href="{{ url_for('static', filename='images/aero-bg.png') }}" fetchpriority="high" />
     <link rel="stylesheet" href="{{ url_for('static', filename='auth.css') }}" />
   </head>
   <body>
@@ -18,7 +19,7 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
 
           <label for="username">Username</label>
-          <input id="username" name="username" type="text" autocomplete="username" required />
+          <input id="username" name="username" type="text" autocomplete="username" maxlength="30" required />
 
           <label for="password">Password</label>
           <input id="password" name="password" type="password" autocomplete="new-password" required />
@@ -53,7 +54,7 @@
           </p>
 
           <p class="info-section">
-            <strong>Why Built</strong>
+            <strong>Why was CyFi Built</strong>
             <span>CyFi was built due to many modern systems being complex and utilizing data that is not needed. Rather than connecting to a bank, you are in control of your own data. No real data is at risk.</span>
           </p>
         </div>
