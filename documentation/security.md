@@ -17,9 +17,11 @@ User's should be registered via User and Password.
 Main risks include:
 
 - User's shouldn't be able to see or modify other user's data
-- Bad password storage / hashing
+- Improper password storage / hashing
 - Session Hijacking
-- Bad injection
+- Malicious injection
+- Requests from outside sources
+- Cookie / session failure
 
 ## Security Implementation
 
