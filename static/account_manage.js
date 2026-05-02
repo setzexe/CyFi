@@ -65,6 +65,11 @@ function clearChildren(node) {
   }
 }
 
+function csrfHeaders() {
+  const token = document.querySelector('meta[name="csrf-token"]')?.content || "";
+  return token ? { "X-CSRF-Token": token } : {};
+}
+
 async function toJson(response) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -229,7 +234,7 @@ async function handleSubmit(event) {
       const body = payloadForCreate();
       await fetch("/api/accounts", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...csrfHeaders() },
         body: JSON.stringify(body),
       }).then(toJson);
 
@@ -241,7 +246,7 @@ async function handleSubmit(event) {
       const { accountId, body } = payloadForDelete();
       await fetch(`/api/accounts/${accountId}`, {
         method: "DELETE",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...csrfHeaders() },
         body: JSON.stringify(body),
       }).then(toJson);
 

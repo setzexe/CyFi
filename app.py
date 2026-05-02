@@ -1,9 +1,11 @@
 import os
 import calendar
+import secrets
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
 from functools import wraps
+from hmac import compare_digest
 
 from flask import Flask, abort, g, jsonify, redirect, render_template, request, session, url_for
 from flask_migrate import Migrate
@@ -17,6 +19,8 @@ load_dotenv()
 
 db = SQLAlchemy()
 migrate = Migrate()
+
+DEFAULT_SECRET_KEY = "dev-key-change-me"
 
 
 def _database_url() -> str:
@@ -97,16 +101,29 @@ def _next_monthly_due(due_day: int, today: date) -> date:
     return date(next_year, next_month, _safe_day(next_year, next_month, due_day))
 
 
+def _is_production() -> bool:
+    return os.getenv("FLASK_ENV") == "production"
+
+
 def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__)
     app.config.from_mapping(
-        SECRET_KEY=os.getenv("SECRET_KEY", "dev-key-change-me"),
+        SECRET_KEY=os.getenv("SECRET_KEY", DEFAULT_SECRET_KEY),
         SQLALCHEMY_DATABASE_URI=_database_url(),
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SECURE=_is_production(),
+        PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
+        LOGIN_RATE_LIMIT_ATTEMPTS=5,
+        LOGIN_RATE_LIMIT_WINDOW=timedelta(minutes=15),
     )
 
     if test_config:
         app.config.update(test_config)
+
+    if _is_production() and app.config["SECRET_KEY"] == DEFAULT_SECRET_KEY:
+        raise RuntimeError("SECRET_KEY must be set to a strong random value in production.")
 
     db.init_app(app)
     migrate.init_app(app, db)
@@ -114,8 +131,34 @@ def create_app(test_config: dict | None = None) -> Flask:
     # Register model metadata for migrations.
     from models import Account, AccountHistoryEvent, RecurringBill, Transaction, User  # noqa: F401
 
+    login_attempts: dict[str, list[datetime]] = {}
+
     def normalize_username(value: str) -> str:
         return value.strip().lower()
+
+    def login_rate_limit_key(username: str) -> str:
+        remote_addr = request.remote_addr or "unknown"
+        return f"{remote_addr}:{username or 'blank'}"
+
+    def recent_login_failures(username: str) -> list[datetime]:
+        window = app.config["LOGIN_RATE_LIMIT_WINDOW"]
+        now = datetime.now(timezone.utc)
+        key = login_rate_limit_key(username)
+        failures = [failed_at for failed_at in login_attempts.get(key, []) if now - failed_at < window]
+        login_attempts[key] = failures
+        return failures
+
+    def login_is_rate_limited(username: str) -> bool:
+        return len(recent_login_failures(username)) >= app.config["LOGIN_RATE_LIMIT_ATTEMPTS"]
+
+    def record_failed_login(username: str):
+        key = login_rate_limit_key(username)
+        failures = recent_login_failures(username)
+        failures.append(datetime.now(timezone.utc))
+        login_attempts[key] = failures
+
+    def clear_failed_logins(username: str):
+        login_attempts.pop(login_rate_limit_key(username), None)
 
     def load_current_user():
         user_id = session.get("user_id")
@@ -123,13 +166,58 @@ def create_app(test_config: dict | None = None) -> Flask:
             return None
         return db.session.get(User, user_id)
 
+    def csrf_token() -> str:
+        token = session.get("csrf_token")
+        if not token:
+            token = secrets.token_urlsafe(32)
+            session["csrf_token"] = token
+        return token
+
+    def submitted_csrf_token() -> str:
+        return request.form.get("csrf_token", "") or request.headers.get("X-CSRF-Token", "")
+
     @app.before_request
     def attach_current_user():
         g.user = load_current_user()
 
+    @app.before_request
+    def protect_from_csrf():
+        if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
+            return None
+
+        if request.path.startswith("/api/") and g.get("user") is None:
+            return None
+
+        expected_token = session.get("csrf_token", "")
+        sent_token = submitted_csrf_token()
+        if expected_token and sent_token and compare_digest(expected_token, sent_token):
+            return None
+
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "CSRF token missing or invalid"}), 400
+
+        abort(400)
+
+    @app.after_request
+    def add_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; "
+            "img-src 'self' data:; "
+            "style-src 'self' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "base-uri 'self'; "
+            "form-action 'self'; "
+            "frame-ancestors 'none'",
+        )
+        return response
+
     @app.context_processor
     def inject_current_user():
-        return {"current_user": g.get("user")}
+        return {"current_user": g.get("user"), "csrf_token": csrf_token}
 
     def login_required(view):
         @wraps(view)
@@ -208,6 +296,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                     error = "That username is already taken."
                 else:
                     session.clear()
+                    session.permanent = True
                     session["user_id"] = user_id
                     return redirect(url_for("home"))
 
@@ -222,12 +311,19 @@ def create_app(test_config: dict | None = None) -> Flask:
         if request.method == "POST":
             username = normalize_username(request.form.get("username", ""))
             password = request.form.get("password", "")
-            user = User.query.filter_by(username=username).first()
 
-            if user is None or not check_password_hash(user.password_hash, password):
-                error = "Username or password is incorrect."
+            if login_is_rate_limited(username):
+                error = "Too many login attempts. Please wait and try again."
             else:
+                user = User.query.filter_by(username=username).first()
+
+            if not error and (user is None or not check_password_hash(user.password_hash, password)):
+                record_failed_login(username)
+                error = "Username or password is incorrect."
+            elif not error:
+                clear_failed_logins(username)
                 session.clear()
+                session.permanent = True
                 session["user_id"] = user.id
                 return redirect(_safe_next_url(request.args.get("next")) or url_for("home"))
 

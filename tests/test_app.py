@@ -1,5 +1,7 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
+
+import pytest
 
 from app import create_app, db
 from models import Account, AccountHistoryEvent, RecurringBill, Transaction, User
@@ -44,14 +46,26 @@ def _test_user_id(app):
     return app.config["TEST_USER_ID"]
 
 
+def _set_csrf_token(client, token="test-csrf-token"):
+    with client.session_transaction() as session:
+        session["csrf_token"] = token
+    return token
+
+
+def _csrf_headers(client):
+    return {"X-CSRF-Token": _set_csrf_token(client)}
+
+
 def test_signup_creates_user_with_hashed_password_and_session():
     client, app = _build_client_and_app()
     with client.session_transaction() as session:
         session.clear()
+    csrf_token = _set_csrf_token(client)
 
     response = client.post(
         "/signup",
         data={
+            "csrf_token": csrf_token,
             "username": "new_user",
             "password": "password123",
             "confirm_password": "password123",
@@ -91,9 +105,11 @@ def test_first_signup_claims_existing_legacy_accounts():
         db.session.commit()
 
     client = app.test_client()
+    csrf_token = _set_csrf_token(client)
     response = client.post(
         "/signup",
         data={
+            "csrf_token": csrf_token,
             "username": "owner",
             "password": "password123",
             "confirm_password": "password123",
@@ -112,10 +128,12 @@ def test_login_sets_user_session():
     client, app = _build_client_and_app()
     with client.session_transaction() as session:
         session.clear()
+    csrf_token = _set_csrf_token(client)
 
     response = client.post(
         "/login",
         data={
+            "csrf_token": csrf_token,
             "username": "tester",
             "password": "password123",
         },
@@ -126,6 +144,44 @@ def test_login_sets_user_session():
 
     with client.session_transaction() as session:
         assert session.get("user_id") == _test_user_id(app)
+
+
+def test_session_cookie_security_settings_are_configured():
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+        }
+    )
+
+    assert app.config["SESSION_COOKIE_HTTPONLY"] is True
+    assert app.config["SESSION_COOKIE_SAMESITE"] == "Lax"
+    assert app.config["PERMANENT_SESSION_LIFETIME"] == timedelta(hours=8)
+
+
+def test_production_requires_real_secret_key(monkeypatch):
+    monkeypatch.setenv("FLASK_ENV", "production")
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+
+    with pytest.raises(RuntimeError, match="SECRET_KEY must be set"):
+        create_app(
+            {
+                "TESTING": True,
+                "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+            }
+        )
+
+
+def test_security_headers_are_added_to_responses():
+    client, _ = _build_client_and_app()
+
+    response = client.get("/login")
+
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert response.headers["Referrer-Policy"] == "same-origin"
+    assert "default-src 'self'" in response.headers["Content-Security-Policy"]
+    assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
 
 
 def test_logged_out_user_cannot_access_private_pages_or_apis():
@@ -140,6 +196,64 @@ def test_logged_out_user_cannot_access_private_pages_or_apis():
     api_response = client.get("/api/accounts/summary")
     assert api_response.status_code == 401
     assert api_response.get_json()["error"] == "Login required"
+
+
+def test_api_write_requires_valid_csrf_token():
+    client, app = _build_client_and_app()
+
+    with app.app_context():
+        account = Account.query.filter_by(name="Checking").first()
+        account_id = account.id
+
+    missing = client.post(
+        "/api/transactions",
+        json={
+            "account_id": account_id,
+            "transaction_name": "Coffee",
+            "amount": "4.50",
+            "category": "Food",
+            "transaction_type": "expense",
+        },
+    )
+    assert missing.status_code == 400
+    assert missing.get_json()["error"] == "CSRF token missing or invalid"
+
+    _set_csrf_token(client, "real-token")
+    invalid = client.post(
+        "/api/transactions",
+        headers={"X-CSRF-Token": "wrong-token"},
+        json={
+            "account_id": account_id,
+            "transaction_name": "Coffee",
+            "amount": "4.50",
+            "category": "Food",
+            "transaction_type": "expense",
+        },
+    )
+    assert invalid.status_code == 400
+
+
+def test_login_rate_limit_blocks_repeated_failures():
+    client, _ = _build_client_and_app()
+    with client.session_transaction() as session:
+        session.clear()
+
+    csrf_token = _set_csrf_token(client)
+    bad_login = {
+        "csrf_token": csrf_token,
+        "username": "tester",
+        "password": "wrong-password",
+    }
+
+    for _ in range(5):
+        response = client.post("/login", data=bad_login)
+        assert response.status_code == 200
+        assert b"Username or password is incorrect." in response.data
+
+    blocked = client.post("/login", data=bad_login)
+
+    assert blocked.status_code == 200
+    assert b"Too many login attempts. Please wait and try again." in blocked.data
 
 
 def test_user_cannot_read_another_users_account_transactions():
@@ -360,6 +474,7 @@ def test_expense_decreases_balance():
 
     response = client.post(
         "/api/transactions",
+        headers=_csrf_headers(client),
         json={
             "account_id": account_id,
             "transaction_name": "Coffee",
@@ -384,6 +499,7 @@ def test_deposit_increases_balance():
 
     response = client.post(
         "/api/transactions",
+        headers=_csrf_headers(client),
         json={
             "account_id": account_id,
             "transaction_name": "Paycheck",
@@ -408,6 +524,7 @@ def test_bad_input_returns_error():
 
     response = client.post(
         "/api/transactions",
+        headers=_csrf_headers(client),
         json={
             "account_id": account_id,
             "transaction_name": "",
@@ -428,6 +545,7 @@ def test_transaction_cannot_make_balance_negative():
 
     response = client.post(
         "/api/transactions",
+        headers=_csrf_headers(client),
         json={
             "account_id": account_id,
             "transaction_name": "Large Purchase",
@@ -453,6 +571,7 @@ def test_recurring_transaction_creates_recurring_bill():
 
     response = client.post(
         "/api/transactions",
+        headers=_csrf_headers(client),
         json={
             "account_id": account_id,
             "transaction_name": "HOA",
@@ -480,6 +599,7 @@ def test_recurring_transaction_requires_due_date():
 
     response = client.post(
         "/api/transactions",
+        headers=_csrf_headers(client),
         json={
             "account_id": account_id,
             "transaction_name": "HOA",
@@ -553,7 +673,7 @@ def test_recurring_bill_can_be_removed_and_hidden_from_active_list():
     assert list_before.status_code == 200
     assert any(item["id"] == bill_id for item in list_before.get_json()["bills"])
 
-    deleted = client.delete(f"/api/bills/{bill_id}")
+    deleted = client.delete(f"/api/bills/{bill_id}", headers=_csrf_headers(client))
     assert deleted.status_code == 200
 
     list_after = client.get("/api/bills/recurring")
@@ -566,6 +686,7 @@ def test_create_account_adds_history_event():
 
     response = client.post(
         "/api/accounts",
+        headers=_csrf_headers(client),
         json={
             "name": "Travel",
             "starting_balance": "250.00",
@@ -596,6 +717,7 @@ def test_delete_account_requires_confirmation():
 
     response = client.delete(
         f"/api/accounts/{account_id}",
+        headers=_csrf_headers(client),
         json={"confirm": False},
     )
     assert response.status_code == 400
@@ -614,6 +736,7 @@ def test_delete_account_removes_account_and_logs_history():
 
     response = client.delete(
         f"/api/accounts/{account_id}",
+        headers=_csrf_headers(client),
         json={"confirm": True, "reason": "Consolidated"},
     )
     assert response.status_code == 200
@@ -638,6 +761,7 @@ def test_create_account_works_without_history_table():
 
     response = client.post(
         "/api/accounts",
+        headers=_csrf_headers(client),
         json={
             "name": "Vacation",
             "starting_balance": "50.00",
@@ -662,6 +786,7 @@ def test_delete_account_works_without_history_table():
 
     response = client.delete(
         f"/api/accounts/{account_id}",
+        headers=_csrf_headers(client),
         json={"confirm": True},
     )
     assert response.status_code == 200

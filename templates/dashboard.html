@@ -3,6 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="csrf-token" content="{{ csrf_token() }}" />
     <title>CyFi Dashboard</title>
     <link rel="preload" as="image" href="{{ url_for('static', filename='images/aero-bg.png') }}" />
     <style>
@@ -34,6 +35,7 @@
       <div class="topbar-actions">
         <button id="refreshBtn" class="ghost-btn" type="button">Refresh</button>
         <form action="{{ url_for('logout') }}" method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
           <button class="ghost-btn" type="submit">Log Out</button>
         </form>
       </div>

@@ -64,6 +64,11 @@ function clearChildren(node) {
   }
 }
 
+function csrfHeaders() {
+  const token = document.querySelector('meta[name="csrf-token"]')?.content || "";
+  return token ? { "X-CSRF-Token": token } : {};
+}
+
 function showMessage(text, type = "") {
   ui.formMessage.textContent = text;
   ui.formMessage.classList.remove("success", "error");
@@ -274,7 +279,7 @@ async function handleSubmit(event) {
   try {
     await fetch("/api/transactions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...csrfHeaders() },
       body: JSON.stringify(payload),
     }).then(toJson);
 
@@ -302,6 +307,7 @@ async function handleRemoveRecurringBill() {
   try {
     await fetch(`/api/bills/${billId}`, {
       method: "DELETE",
+      headers: csrfHeaders(),
     }).then(toJson);
 
     showMessage("Recurring bill removed.", "success");
