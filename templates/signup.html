@@ -7,8 +7,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='auth.css') }}" />
   </head>
   <body>
-    <main class="auth-shell">
-      <section class="auth-card">
+    <main class="auth-shell auth-shell--split">
+      <section class="auth-card signup-card">
         <p class="eyebrow">CYFI</p>
         <h1>Create Account</h1>
         <p class="subtitle">Start with a private workspace for your accounts and transactions.</p>
@@ -37,6 +37,23 @@
         {% endif %}
 
         <p class="auth-switch">Already have an account? <a href="{{ url_for('login_page') }}">Log in</a></p>
+      </section>
+
+      <section class="auth-card info-card" aria-labelledby="infoTitle">
+        <div class="info-bubble" aria-label="About CyFi">
+          <p class="eyebrow">CYFI</p>
+          <h2 id="infoTitle">What is CyFi?</h2>
+
+          <p class="info-section">
+            <strong>Purpose</strong>
+            <span>CyFi is a personal finance tracker built for simplicity and security. It lets you manually manage accounts, transactions, and recurring bills from one unified dashboard.</span>
+          </p>
+
+          <p class="info-section">
+            <strong>Why Built</strong>
+            <span>CyFi was built due to many modern systems being complex and utilizing data that is not needed. Rather than connecting to a bank, you are in control of your own data. No real data is at risk.</span>
+          </p>
+        </div>
       </section>
     </main>
   </body>
