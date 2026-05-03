@@ -1,43 +1,68 @@
 # CyFi - Cyberseverance Finance Tracker
 
-CyFi is a simple and manual finance tracker built with Flask and PostgreSQL.
+CyFi is a manual personal finance tracker built with the purpose of keeping budgeting simple: create your own accounts, enter transactions by hand, track recurring bills, and review totals from a single dashboard.
 
-Users may manually input input transactions and categorize spending to track balances, budgets, etc.
+## Link
+
+You can access the application here:
+
+# [CyFi](https://cyfi-9jzy.onrender.com/login)
 
 ## Features
 
-- Account tracking (Checking, Savings, Investments)
-- Manual transaction entry
-- Category based spending (Food, Gas, Subscriptions, etc)
-- Balance updates based on transactions
-- Basic financial overview dashboard
+- User accounts with secure password hashing
+- Per-user bank account tracking
+- Manual deposits and expenses
+- Recurring bill management
+- Recent activity & full transaction history
+- Security elements like session protection, CSRF protection, and login rate limiting
+- Interactive & responsive UI for desktop and mobile
 
-This project means to stay simple and controllable for easy budgeting and financial health management. The user experience should not have to be complex.
+## Notable Security Features
 
-## Tech Used
+- Passwords are hashed with Werkzeug before storage
+- Session cookies are hardened with `HttpOnly`, `SameSite`, and production-only `Secure`
+- CSRF tokens protect form submissions and API requests
+- Account's are exclusive only to the user
+- Rate limitd login attempts, due to brute forcing
 
-- Backend: Flask (Python)
-- Database: PostgreSQL (Supabase)
-- Frontend: HTML / CSS / JS
+## Tech Stack
 
-## Purpose 
+- Backend: Flask, Flask-Migrate, Flask-SQLAlchemy
+- Database: PostgreSQL in production; SQLite for local development
+- Frontend: HTML, CSS, & JavaScript
+- Deployment: Render
 
-This project was created as a personal finance tool for myself. I needed a simple one tailored to very simple needs. 
+## Local Setup
 
-This is also my first time handling a sizeable workflow like this, so doing this also helps with general knowledge when it comes to system modeling, backend, etc.
+This can be run from the link above, or it can be deployed from your localhost.
 
-## Setup (Coming Soon)
+1. Create and activate a virtual environment.
+2. Install dependencies with `pip install -r requirements.txt`.
+3. Create a `.env` file. `.env.example` is provided.
+4. Run database migrations with `flask db upgrade`.
+5. Start the app with `flask run`.
 
-Instructions for running the app. Will be updated when app is complete.
+## Environment Variables
 
-## Planned Features
+Create a `.env` file with the following values:
 
-- Budget limits for categories
-- Net worth tracking over time
-- Easier mobile interface
+- `SECRET_KEY`
+- `DATABASE_URL`
 
-## License & Signature
+**Local Development:** SQLite is used automatically if `DATABASE_URL` is not set.
 
-This project / tool is for education and personal use.
+## Deployment
 
-setzexe 
+CyFi is set up to deploy from GitHub to Render. Whenever main is updated, Render pulls all changes and updates it to the build. 
+
+## Project Notes
+
+- The app is intentionally manual and does not connect to a bank.
+- The security documentation in `documentation/security.md` explains the implementation details in more depth.
+
+## License
+
+This project is for personal and educational use. 
+
+setzexe
