@@ -6,9 +6,17 @@ CyFi is a manual personal finance tracker built with the purpose of keeping budg
 
 You can access the application here:
 
-# [CyFi](https://cyfi-9jzy.onrender.com/login)
+[CyFi](https://cyfi-9jzy.onrender.com/login)
 
-## Features
+## Documentation
+
+Documentation for this application, which goes into more specifics about both general development & cybersecurity, can be found here:
+
+[Main Documentation](documentation/documentation.md)
+
+[Security Documentation](documentation/security.md)
+
+## Features 
 
 - User accounts with secure password hashing
 - Per-user bank account tracking
