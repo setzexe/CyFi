@@ -21,6 +21,7 @@ db = SQLAlchemy()
 migrate = Migrate()
 
 DEFAULT_SECRET_KEY = "dev-key-change-me"
+DEFAULT_MAINTENANCE_MESSAGE = "CyFi is temporarily down for maintenance. Please check back soon."
 MAX_USERNAME_LENGTH = 30
 MAX_ACCOUNT_NAME_LENGTH = 50
 MAX_TRANSACTION_NAME_LENGTH = 50
@@ -40,6 +41,10 @@ def _database_url() -> str:
         url = url.replace("postgresql://", "postgresql+psycopg://", 1)
 
     return url
+
+
+def _env_flag(name: str) -> bool:
+    return os.getenv(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _parse_occurred_at(value: str | None) -> datetime | None:
@@ -128,6 +133,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
         LOGIN_RATE_LIMIT_ATTEMPTS=5,
         LOGIN_RATE_LIMIT_WINDOW=timedelta(minutes=15),
+        MAINTENANCE_MODE=_env_flag("MAINTENANCE_MODE"),
+        MAINTENANCE_MESSAGE=os.getenv("MAINTENANCE_MESSAGE", DEFAULT_MAINTENANCE_MESSAGE),
     )
 
     if test_config:
@@ -190,6 +197,19 @@ def create_app(test_config: dict | None = None) -> Flask:
     @app.before_request
     def attach_current_user():
         g.user = load_current_user()
+
+    @app.before_request
+    def redirect_for_maintenance():
+        if not app.config["MAINTENANCE_MODE"]:
+            return None
+
+        if request.endpoint in {"static", "maintenance_page"}:
+            return None
+
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "Service temporarily unavailable for maintenance"}), 503
+
+        return redirect(url_for("maintenance_page"))
 
     @app.before_request
     def protect_from_csrf():
@@ -270,6 +290,10 @@ def create_app(test_config: dict | None = None) -> Flask:
         Account.query.filter_by(user_id=None).update({"user_id": user.id})
         if can_record_account_events():
             AccountHistoryEvent.query.filter_by(user_id=None).update({"user_id": user.id})
+
+    @app.get("/maintenance")
+    def maintenance_page():
+        return render_template("maintenance.html", message=app.config["MAINTENANCE_MESSAGE"]), 503
 
     @app.route("/signup", methods=["GET", "POST"])
     def signup_page():

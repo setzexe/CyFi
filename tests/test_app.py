@@ -184,6 +184,42 @@ def test_security_headers_are_added_to_responses():
     assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
 
 
+def test_maintenance_page_renders_custom_message():
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+            "MAINTENANCE_MODE": True,
+            "MAINTENANCE_MESSAGE": "Custom maintenance text.",
+        }
+    )
+    client = app.test_client()
+
+    response = client.get("/maintenance")
+
+    assert response.status_code == 503
+    assert b"Custom maintenance text." in response.data
+
+
+def test_maintenance_mode_redirects_pages_and_blocks_apis():
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+            "MAINTENANCE_MODE": True,
+        }
+    )
+    client = app.test_client()
+
+    page_response = client.get("/login")
+    api_response = client.get("/api/accounts/summary")
+
+    assert page_response.status_code == 302
+    assert page_response.headers["Location"] == "/maintenance"
+    assert api_response.status_code == 503
+    assert api_response.get_json() == {"error": "Service temporarily unavailable for maintenance"}
+
+
 def test_database_health_check_hides_raw_errors(monkeypatch):
     client, _ = _build_client_and_app()
 
