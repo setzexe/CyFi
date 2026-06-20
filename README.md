@@ -8,7 +8,9 @@ You can access the application here:
 
 [CyFi](https://cyfi-9jzy.onrender.com/login)
 
-A temporary demo mode is available from the login page. Click **Try Demo** to open a fresh sample account. Demo data is separate for each visitor and is cleared after logout or expiration.
+# Maintenance
+
+CyFi is currently under maintenance to implement version 1.1. This is set to include a **demo mode** and the general **maintanence ability**.
 
 ## Documentation
 
