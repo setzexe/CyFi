@@ -21,7 +21,8 @@ db = SQLAlchemy()
 migrate = Migrate()
 
 DEFAULT_SECRET_KEY = "dev-key-change-me"
-DEFAULT_MAINTENANCE_MESSAGE = "CyFi is temporarily down for maintenance. Please check back soon."
+DEFAULT_MAINTENANCE_MESSAGE = "CyFi is temporarily down for maintenance. Check back soon..."
+DEMO_SESSION_LIFETIME = timedelta(hours=24)
 MAX_USERNAME_LENGTH = 30
 MAX_ACCOUNT_NAME_LENGTH = 50
 MAX_TRANSACTION_NAME_LENGTH = 50
@@ -121,6 +122,16 @@ def _is_production() -> bool:
     return os.getenv("FLASK_ENV") == "production"
 
 
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
 def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__)
     app.config.from_mapping(
@@ -197,6 +208,17 @@ def create_app(test_config: dict | None = None) -> Flask:
     @app.before_request
     def attach_current_user():
         g.user = load_current_user()
+
+    @app.before_request
+    def clean_up_expired_demo_users():
+        if request.endpoint == "static":
+            return None
+
+        deleted_ids = cleanup_expired_demo_users()
+        if g.user is not None and g.user.id in deleted_ids:
+            session.clear()
+            g.user = None
+        return None
 
     @app.before_request
     def redirect_for_maintenance():
@@ -291,6 +313,119 @@ def create_app(test_config: dict | None = None) -> Flask:
         if can_record_account_events():
             AccountHistoryEvent.query.filter_by(user_id=None).update({"user_id": user.id})
 
+    def cleanup_expired_demo_users() -> set[int]:
+        now = _utc_now()
+        try:
+            demo_users = User.query.filter_by(is_demo=True).all()
+        except SQLAlchemyError:
+            db.session.rollback()
+            return set()
+
+        expired_demo_users = [
+            user for user in demo_users if user.demo_expires_at is not None and _as_utc(user.demo_expires_at) <= now
+        ]
+        deleted_ids = {user.id for user in expired_demo_users}
+
+        for user in expired_demo_users:
+            db.session.delete(user)
+
+        if expired_demo_users:
+            db.session.commit()
+
+        return deleted_ids
+
+    def create_demo_user() -> User:
+        demo_user = User(
+            username=f"demo_{secrets.token_hex(6)}",
+            password_hash=generate_password_hash(secrets.token_urlsafe(24)),
+            is_demo=True,
+            demo_expires_at=_utc_now() + DEMO_SESSION_LIFETIME,
+        )
+        db.session.add(demo_user)
+        db.session.flush()
+
+        checking = Account(
+            user_id=demo_user.id,
+            name="Demo Checking",
+            account_type="checking",
+            starting_balance=Decimal("1500.00"),
+            current_balance=Decimal("1284.55"),
+        )
+        savings = Account(
+            user_id=demo_user.id,
+            name="Demo Savings",
+            account_type="savings",
+            starting_balance=Decimal("4200.00"),
+            current_balance=Decimal("4350.00"),
+        )
+        db.session.add_all([checking, savings])
+        db.session.flush()
+
+        now = _utc_now()
+        db.session.add_all(
+            [
+                Transaction(
+                    account_id=checking.id,
+                    transaction_name="Paycheck",
+                    amount=Decimal("1200.00"),
+                    category="Income",
+                    transaction_type="deposit",
+                    note="Sample demo deposit",
+                    occurred_at=now - timedelta(days=2),
+                ),
+                Transaction(
+                    account_id=checking.id,
+                    transaction_name="Groceries",
+                    amount=Decimal("86.34"),
+                    category="Food",
+                    transaction_type="expense",
+                    note="Sample demo expense",
+                    occurred_at=now - timedelta(days=1, hours=4),
+                ),
+                Transaction(
+                    account_id=checking.id,
+                    transaction_name="Coffee",
+                    amount=Decimal("5.11"),
+                    category="Food",
+                    transaction_type="expense",
+                    occurred_at=now - timedelta(hours=6),
+                ),
+                Transaction(
+                    account_id=savings.id,
+                    transaction_name="Savings Transfer",
+                    amount=Decimal("150.00"),
+                    category="Savings",
+                    transaction_type="deposit",
+                    occurred_at=now - timedelta(days=3),
+                ),
+            ]
+        )
+        db.session.add_all(
+            [
+                RecurringBill(
+                    account_id=checking.id,
+                    name="Internet",
+                    amount=Decimal("65.00"),
+                    category="Recurring",
+                    due_day=15,
+                    frequency="monthly",
+                    active=True,
+                ),
+                RecurringBill(
+                    account_id=checking.id,
+                    name="Phone",
+                    amount=Decimal("45.00"),
+                    category="Recurring",
+                    due_day=22,
+                    frequency="monthly",
+                    active=True,
+                ),
+            ]
+        )
+
+        db.session.commit()
+        return demo_user
+
     @app.get("/maintenance")
     def maintenance_page():
         return render_template("maintenance.html", message=app.config["MAINTENANCE_MESSAGE"]), 503
@@ -364,9 +499,25 @@ def create_app(test_config: dict | None = None) -> Flask:
 
         return render_template("login.html", error=error)
 
+    @app.post("/demo")
+    def demo_login():
+        if g.user is not None:
+            return redirect(url_for("home"))
+
+        cleanup_expired_demo_users()
+        demo_user = create_demo_user()
+        session.clear()
+        session.permanent = True
+        session["user_id"] = demo_user.id
+        return redirect(url_for("home"))
+
     @app.post("/logout")
     def logout():
+        current_user = g.user
         session.clear()
+        if current_user is not None and current_user.is_demo:
+            db.session.delete(current_user)
+            db.session.commit()
         return redirect(url_for("login_page"))
 
     @app.get("/")

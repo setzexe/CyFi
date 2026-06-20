@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -144,6 +144,111 @@ def test_login_sets_user_session():
 
     with client.session_transaction() as session:
         assert session.get("user_id") == _test_user_id(app)
+
+
+def test_demo_login_creates_temporary_seeded_user():
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+        }
+    )
+    with app.app_context():
+        db.create_all()
+
+    client = app.test_client()
+    response = client.post("/demo", data={"csrf_token": _set_csrf_token(client)})
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/"
+
+    with client.session_transaction() as session:
+        demo_user_id = session.get("user_id")
+
+    with app.app_context():
+        demo_user = db.session.get(User, demo_user_id)
+        assert demo_user is not None
+        assert demo_user.username.startswith("demo_")
+        assert demo_user.is_demo is True
+        assert demo_user.demo_expires_at is not None
+
+        accounts = Account.query.filter_by(user_id=demo_user.id).all()
+        account_ids = [account.id for account in accounts]
+        assert {account.name for account in accounts} == {"Demo Checking", "Demo Savings"}
+        assert Transaction.query.filter(Transaction.account_id.in_(account_ids)).count() == 4
+        assert RecurringBill.query.filter(RecurringBill.account_id.in_(account_ids)).count() == 2
+
+
+def test_demo_user_is_deleted_on_logout():
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+        }
+    )
+    with app.app_context():
+        db.create_all()
+
+    client = app.test_client()
+    client.post("/demo", data={"csrf_token": _set_csrf_token(client)})
+    with client.session_transaction() as session:
+        demo_user_id = session.get("user_id")
+
+    with app.app_context():
+        account_ids = [account.id for account in Account.query.filter_by(user_id=demo_user_id).all()]
+
+    logout_csrf_token = _set_csrf_token(client)
+    response = client.post("/logout", data={"csrf_token": logout_csrf_token})
+
+    assert response.status_code == 302
+    assert response.headers["Location"] == "/login"
+
+    with app.app_context():
+        assert db.session.get(User, demo_user_id) is None
+        assert Account.query.filter_by(user_id=demo_user_id).count() == 0
+        assert Transaction.query.filter(Transaction.account_id.in_(account_ids)).count() == 0
+        assert RecurringBill.query.filter(RecurringBill.account_id.in_(account_ids)).count() == 0
+
+
+def test_expired_demo_users_are_cleaned_up_on_request():
+    app = create_app(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+        }
+    )
+    with app.app_context():
+        db.create_all()
+        expired_demo = User(
+            username="demo_expired",
+            password_hash=generate_password_hash("temporary"),
+            is_demo=True,
+            demo_expires_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        )
+        active_demo = User(
+            username="demo_active",
+            password_hash=generate_password_hash("temporary"),
+            is_demo=True,
+            demo_expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+        )
+        real_user = User(
+            username="real_user",
+            password_hash=generate_password_hash("password123"),
+        )
+        db.session.add_all([expired_demo, active_demo, real_user])
+        db.session.commit()
+        expired_demo_id = expired_demo.id
+        active_demo_id = active_demo.id
+        real_user_id = real_user.id
+
+    client = app.test_client()
+    response = client.get("/login")
+
+    assert response.status_code == 200
+    with app.app_context():
+        assert db.session.get(User, expired_demo_id) is None
+        assert db.session.get(User, active_demo_id) is not None
+        assert db.session.get(User, real_user_id) is not None
 
 
 def test_session_cookie_security_settings_are_configured():

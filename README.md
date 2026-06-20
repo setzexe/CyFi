@@ -8,6 +8,8 @@ You can access the application here:
 
 [CyFi](https://cyfi-9jzy.onrender.com/login)
 
+A temporary demo mode is available from the login page. Click **Try Demo** to open a fresh sample account. Demo data is separate for each visitor and is cleared after logout or expiration.
+
 ## Documentation
 
 Documentation for this application, which goes into more specifics about both general development & cybersecurity, can be found here:
@@ -20,6 +22,7 @@ Documentation for this application, which goes into more specifics about both ge
 
 - User accounts with secure password hashing
 - Per-user bank account tracking
+- Temporary demo mode with sample data
 - Manual deposits and expenses
 - Recurring bill management
 - Recent activity & full transaction history
@@ -57,6 +60,8 @@ Create a `.env` file with the following values:
 
 - `SECRET_KEY`
 - `DATABASE_URL`
+- `MAINTENANCE_MODE`
+- `MAINTENANCE_MESSAGE`
 
 **Local Development:** SQLite is used automatically if `DATABASE_URL` is not set.
 
