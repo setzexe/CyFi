@@ -33,6 +33,12 @@
           <p class="message" aria-hidden="true"></p>
         {% endif %}
 
+        <div class="auth-divider"><span>or</span></div>
+        <form class="demo-form" action="{{ url_for('demo_login') }}" method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <button class="demo-btn" type="submit">Try Demo</button>
+        </form>
+
         <p class="auth-switch">New to CyFi? <a href="{{ url_for('signup_page') }}">Create an account</a></p>
       </section>
 
