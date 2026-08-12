@@ -10,7 +10,7 @@ You can access the application here:
 
 ## Demo Mode / Testing
 
-A demo mode was developed to allow users to test the site without the commitment of creating an account. The demo mode is preloaded with values and account balances meant to stimulate a real bank account. As s![alt text](image.png)uch, you can do what any other user would do with it; add funds, add expenses, etc.
+A demo mode was developed to allow users to test the site without the commitment of creating an account. The demo mode is preloaded with values and account balances meant to stimulate a real bank account. As such, you can do what any other user would do with it; add funds, add expenses, etc.
 
 Data on the demo account is reset when the user logs off. This ensures data stays consistent.
 
