@@ -42,16 +42,7 @@
         <p class="auth-switch">New to CyFi? <a href="{{ url_for('signup_page') }}">Create an account</a></p>
       </section>
 
-      <section class="auth-card updates-card" aria-labelledby="updatesTitle">
-        <p class="eyebrow">CYBERSEVERANCE</p>
-        <h2 id="updatesTitle">News / Updates</h2>
-        <p class="subtitle">Project notes and brand updates will live here.</p>
-
-        <div class="updates-bubble" aria-label="Latest updates">
-          <p class="updates-label">Version 1.0 live!</p>
-          <p class="updates-body">The base version of CyFi is now live ^^ This is an active, ongoing project, with updates and extra features to come. But for now, welcome :]<br><br>For any inquiries / bugs found. Please contact @s6tz on discord</p>
-        </div>
-      </section>
+      {% include "_announcements.html" %}
     </main>
   </body>
 </html>

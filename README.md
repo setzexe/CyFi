@@ -8,9 +8,17 @@ You can access the application here:
 
 [CyFi](https://cyfi-9jzy.onrender.com/login)
 
-# Maintenance
+## Demo Mode / Testing
 
-CyFi is currently under maintenance to implement version 1.1. This is set to include a **demo mode** and the general **maintanence ability**.
+A demo mode was developed to allow users to test the site without the commitment of creating an account. The demo mode is preloaded with values and account balances meant to stimulate a real bank account. As s![alt text](image.png)uch, you can do what any other user would do with it; add funds, add expenses, etc.
+
+Data on the demo account is reset when the user logs off. This ensures data stays consistent.
+
+## Recent Updates
+
+CyFi 1.1 was deployed on the 11 August, 2026. 
+
+This version added a maintanence mode that is used for future updates, along with the creation of a demo account for testing purposes.
 
 ## Documentation
 
@@ -30,6 +38,7 @@ Documentation for this application, which goes into more specifics about both ge
 - Recent activity & full transaction history
 - Security elements like session protection, CSRF protection, and login rate limiting
 - Interactive & responsive UI for desktop and mobile
+- Maintanence mode for updates and downtime (app becomes unusuable to the public) 
 
 ## Notable Security Features
 
